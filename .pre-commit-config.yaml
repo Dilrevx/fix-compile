@@ -1,0 +1,28 @@
+# .pre-commit-config.yaml
+repos:
+  # 1. 基础文件检查
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: trailing-whitespace   # 删除行尾空格
+      - id: end-of-file-fixer     # 确保文件以换行符结尾
+      - id: check-yaml            # 检查 yaml 语法
+      - id: check-added-large-files # 防止提交巨大的文件
+      - id: check-merge-conflict  # 防止提交未解决的合并冲突
+
+  # 2. Ruff (Linting + Formatting) - 速度极快，完美替代 Black/Isort/Flake8
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.3.0  # 建议定期更新这个版本
+    hooks:
+      # Run the linter
+      - id: ruff
+        args: [ --fix ]
+      # Run the formatter
+      - id: ruff-format
+
+  # 3. (可选) 静态类型检查 - 如果你对类型要求严格建议加上
+  # - repo: https://github.com/pre-commit/mirrors-mypy
+  #   rev: v1.8.0
+  #   hooks:
+  #     - id: mypy
+  #       additional_dependencies: [pydantic, typer, types-requests]
