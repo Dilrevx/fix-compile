@@ -12,7 +12,7 @@ repos:
 
   # 2. Ruff (Linting + Formatting) - 速度极快，完美替代 Black/Isort/Flake8
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.3.0  # 建议定期更新这个版本
+    rev: v0.14.13  # 建议定期更新这个版本
     hooks:
       # Run the linter
       - id: ruff

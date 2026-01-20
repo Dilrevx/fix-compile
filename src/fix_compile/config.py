@@ -1,5 +1,19 @@
+import os
+from typing import Any, Optional
+
 from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+def _get_config_from_file(field_name: str) -> Optional[Any]:
+    """Get configuration value from config file."""
+    try:
+        from .config_manager import load_config_file
+
+        config_data = load_config_file()
+        return config_data.get(field_name)
+    except (ImportError, Exception):
+        return None
 
 
 class Config(BaseSettings):
@@ -35,6 +49,31 @@ class Config(BaseSettings):
         # env_prefix="FIXER_",
         # env_nested_delimiter="__",
     )
+
+    def __init__(self, **data):
+        """Initialize config with support for config file values."""
+        # Try to load from config file first, fall back to env vars
+        config_file = _get_config_from_file("OPENAI_API_KEY")
+        if (
+            config_file
+            and "OPENAI_API_KEY" not in data
+            and not os.getenv("OPENAI_API_KEY")
+        ):
+            data["OPENAI_API_KEY"] = config_file
+
+        for key in [
+            "OPENAI_API_BASE",
+            "EXECUTOR_MODEL",
+            "FIXER_MODEL",
+            "LOG_LEVEL",
+            "MAX_TOKENS",
+            "TIMEOUT",
+        ]:
+            config_val = _get_config_from_file(key)
+            if config_val and key not in data and not os.getenv(key):
+                data[key] = config_val
+
+        super().__init__(**data)
 
 
 # 实例化

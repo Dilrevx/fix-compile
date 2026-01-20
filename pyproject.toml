@@ -11,6 +11,8 @@ dependencies = [
     "typer[all]>=0.9.0",
     "rich>=13.0.0",
     "httpx[socks]>=0.28.1",
+    "platformdirs>=4.5.1",
+    "arize-phoenix>=4.3.0",
 ]
 
 

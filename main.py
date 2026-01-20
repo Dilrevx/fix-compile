@@ -11,7 +11,7 @@ def example_fix_dockerfile():
     fixer = DockerfileFixer()
 
     # Example Dockerfile path
-    dockerfile_path = "assets/examples/Dockerfile.bad"
+    dockerfile_path = "examples/no-copy-dir/Dockerfile.bad"
 
     # Example error message
     error_message = """
@@ -22,7 +22,7 @@ def example_fix_dockerfile():
     result = fixer.fix(
         dockerfile_path=dockerfile_path,
         error_message=error_message,
-        build_context="/path/to/build/context",
+        build_context="examples/no-copy-dir",
     )
 
     print("Original Dockerfile:")

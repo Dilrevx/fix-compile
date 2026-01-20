@@ -24,8 +24,9 @@ from .utils import (
 # Load environment variables from .env file
 load_dotenv(
     dotenv_path=".env",
-    override=True,
+    override=False,
 )
+
 
 app = typer.Typer(
     name="fix-compile",

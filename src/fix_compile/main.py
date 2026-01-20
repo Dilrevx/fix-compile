@@ -8,9 +8,19 @@ import typer
 from rich.console import Console
 from rich.panel import Panel
 from rich.syntax import Syntax
+from rich.table import Table
 
 from .brain import AnalysisError, Analyzer
+from .config_manager import (
+    delete_config_value,
+    get_config_dir_path,
+    get_config_file_path,
+    load_config_file,
+    set_config_value,
+    validate_config_key,
+)
 from .executor import ExecutionError, Executor
+from .observability import setup_phoenix_tracing
 from .schema import (
     AnalysisContext,
     DockerBuildConfig,
@@ -26,6 +36,13 @@ app = typer.Typer(
     no_args_is_help=True,
     rich_markup_mode="rich",
 )
+
+# Create subapps for command groups
+config_app = typer.Typer(help="Manage configuration for fix-compile")
+app.add_typer(config_app, name="config")
+
+# Initialize Phoenix tracing on application startup
+setup_phoenix_tracing(project_name="fix-compile", enabled=True)
 
 
 # ============================================================================
@@ -252,9 +269,9 @@ def docker_command(
     try:
         # Phase 1: Build
         if not run_only:
-            console.print(f"\n[bold cyan]{'='*60}[/bold cyan]")
+            console.print(f"\n[bold cyan]{'=' * 60}[/bold cyan]")
             console.print("[bold cyan]Phase 1: Docker Build[/bold cyan]")
-            console.print(f"[bold cyan]{'='*60}[/bold cyan]\n")
+            console.print(f"[bold cyan]{'=' * 60}[/bold cyan]\n")
 
             build_succeeded = _build_loop(
                 executor=executor,
@@ -273,9 +290,9 @@ def docker_command(
 
         # Phase 2: Run
         if not build_only:
-            console.print(f"\n[bold cyan]{'='*60}[/bold cyan]")
+            console.print(f"\n[bold cyan]{'=' * 60}[/bold cyan]")
             console.print("[bold cyan]Phase 2: Docker Run[/bold cyan]")
-            console.print(f"[bold cyan]{'='*60}[/bold cyan]\n")
+            console.print(f"[bold cyan]{'=' * 60}[/bold cyan]\n")
 
             # Reset state for run phase
             state.operation_type = OperationType.RUN
@@ -297,11 +314,11 @@ def docker_command(
                 raise typer.Exit(1)
 
         # Success!
-        console.print(f"\n[bold green]{'='*60}[/bold green]")
+        console.print(f"\n[bold green]{'=' * 60}[/bold green]")
         console.print(
             "[bold green]✅ All operations completed successfully![/bold green]"
         )
-        console.print(f"[bold green]{'='*60}[/bold green]\n")
+        console.print(f"[bold green]{'=' * 60}[/bold green]\n")
 
     except KeyboardInterrupt:
         console.print("\n[yellow]Interrupted by user[/yellow]")
@@ -486,6 +503,156 @@ def _analyze_and_fix(
     except ExecutionError as e:
         console.print(f"[red]Execution failed: {e}[/red]")
         return False
+
+
+# ============================================================================
+# Command: config (Configuration Management)
+# ============================================================================
+
+
+@config_app.command(name="set")
+def config_set(
+    key: str = typer.Argument(..., help="Configuration key"),
+    value: str = typer.Argument(..., help="Configuration value"),
+):
+    """Set a configuration value."""
+    if not validate_config_key(key):
+        valid_keys = {
+            "OPENAI_API_BASE",
+            "OPENAI_API_KEY",
+            "EXECUTOR_MODEL",
+            "FIXER_MODEL",
+            "LOG_LEVEL",
+            "MAX_TOKENS",
+            "TIMEOUT",
+        }
+        console.print(
+            f"[red]Invalid configuration key: {key}[/red]\n"
+            f"[yellow]Valid keys: {', '.join(sorted(valid_keys))}[/yellow]"
+        )
+        raise typer.Exit(1)
+
+    try:
+        set_config_value(key, value)
+        console.print(f"[green]✓ Configuration saved:[/green] {key} = {value}")
+        if key == "OPENAI_API_KEY":
+            console.print("[dim](Sensitive value stored securely)[/dim]")
+    except Exception as e:
+        console.print(f"[red]Failed to save configuration: {e}[/red]")
+        raise typer.Exit(1)
+
+
+@config_app.command(name="get")
+def config_get(key: str = typer.Argument(..., help="Configuration key")):
+    """Get a configuration value."""
+    if not validate_config_key(key):
+        console.print(f"[red]Invalid configuration key: {key}[/red]")
+        raise typer.Exit(1)
+
+    try:
+        config_data = load_config_file()
+        if key in config_data:
+            value = config_data[key]
+            if key == "OPENAI_API_KEY":
+                # Only show masked value for security
+                masked = (
+                    value[:10] + "*" * (len(value) - 10)
+                    if len(value) > 10
+                    else "*" * len(value)
+                )
+                console.print(f"[cyan]{key}:[/cyan] {masked}")
+            else:
+                console.print(f"[cyan]{key}:[/cyan] {value}")
+        else:
+            console.print(f"[yellow]Configuration key not found: {key}[/yellow]")
+    except Exception as e:
+        console.print(f"[red]Failed to read configuration: {e}[/red]")
+        raise typer.Exit(1)
+
+
+@config_app.command(name="list")
+def config_list():
+    """List all configuration values."""
+    try:
+        config_data = load_config_file()
+
+        if not config_data:
+            console.print(
+                "[yellow]No configuration found. Use 'config set' to add values.[/yellow]"
+            )
+            return
+
+        # Create table
+        table = Table(
+            title="Configuration Values", show_header=True, header_style="bold cyan"
+        )
+        table.add_column("Key", style="green")
+        table.add_column("Value", style="white")
+
+        for key, value in sorted(config_data.items()):
+            if key == "OPENAI_API_KEY":
+                # Mask sensitive values
+                masked = (
+                    value[:10] + "*" * (len(value) - 10)
+                    if len(value) > 10
+                    else "*" * len(value)
+                )
+                table.add_row(key, f"[dim]{masked}[/dim]")
+            else:
+                table.add_row(key, str(value))
+
+        console.print(table)
+        console.print(f"\n[dim]Configuration file: {get_config_file_path()}[/dim]")
+    except Exception as e:
+        console.print(f"[red]Failed to read configuration: {e}[/red]")
+        raise typer.Exit(1)
+
+
+@config_app.command(name="delete")
+def config_delete(
+    key: str = typer.Argument(..., help="Configuration key"),
+    confirm: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation"),
+):
+    """Delete a configuration value."""
+    if not validate_config_key(key):
+        console.print(f"[red]Invalid configuration key: {key}[/red]")
+        raise typer.Exit(1)
+
+    try:
+        config_data = load_config_file()
+        if key not in config_data:
+            console.print(f"[yellow]Configuration key not found: {key}[/yellow]")
+            return
+
+        if not confirm:
+            if not typer.confirm(f"Delete configuration key '{key}'?"):
+                console.print("[yellow]Cancelled[/yellow]")
+                return
+
+        delete_config_value(key)
+        console.print(f"[green]✓ Configuration deleted: {key}[/green]")
+    except Exception as e:
+        console.print(f"[red]Failed to delete configuration: {e}[/red]")
+        raise typer.Exit(1)
+
+
+@config_app.command(name="path")
+def config_path():
+    """Show configuration file and directory paths."""
+    config_file = get_config_file_path()
+    config_dir = get_config_dir_path()
+
+    table = Table(
+        title="Configuration Paths", show_header=True, header_style="bold cyan"
+    )
+    table.add_column("Type", style="green")
+    table.add_column("Path", style="white")
+
+    table.add_row("Config File", str(config_file))
+    table.add_row("Config Directory", str(config_dir))
+
+    console.print(table)
+    console.print(f"\n[dim]File exists: {config_file.exists()}[/dim]")
 
 
 # ============================================================================
