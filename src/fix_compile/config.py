@@ -102,13 +102,16 @@ LOGGING_CONFIG = {
 }
 
 
-def setup_logging(log_level: str):
-    """Setup logging configuration."""
+def setup_logging(log_level: str, enabled_console: bool = False):
+    """Setup logging configuration. Default log saved as file only. If enabled_console is True, also log to console."""
     if not USER_LOG_DIR.exists():
         ui.error(
             f"Log directory {USER_LOG_DIR} does not exist. Likely config not loaded."
         )
         raise FileNotFoundError(f"Log directory {USER_LOG_DIR} does not exist.")
+
+    if not enabled_console:
+        LOGGING_CONFIG["loggers"][PROJECT_NAME]["handlers"].remove("console")
 
     LOGGING_CONFIG["loggers"][PROJECT_NAME]["level"] = log_level.upper()
     logging.config.dictConfig(LOGGING_CONFIG)
