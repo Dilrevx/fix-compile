@@ -3,6 +3,7 @@ Global constants for fix-compile.
 This module should NOT import any other internal modules to avoid circular dependencies.
 """
 
+from datetime import datetime
 from enum import IntEnum, StrEnum  # Python 3.11+ use StrEnum
 from pathlib import Path
 from typing import Final
@@ -50,7 +51,7 @@ USER_STATE_DIR: Final[Path] = Path(PLATFORM_DIRS.user_state_dir)
 ENV_FILENAME: Final[str] = ".env"
 CONFIG_FILENAME: Final[str] = "config.yaml"
 CACHE_FILENAME: Final[str] = "cache.json"
-LOG_FILENAME: Final[str] = "%Y/%m/%d/%H-%M-%S.log"
+LOG_FILENAME: Final[str] = datetime.now().strftime("%Y/%m/%d/%H-%M.log")
 
 
 # ---------------------------------------------------------

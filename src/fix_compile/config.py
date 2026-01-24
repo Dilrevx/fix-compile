@@ -8,6 +8,7 @@ Priority:
 
 """
 
+import logging.config
 from pathlib import Path
 
 import yaml
@@ -26,6 +27,7 @@ from fix_compile.constants import (
     DEV_ROOT,
     ENV_FILENAME,
     LOG_FILENAME,
+    PROJECT_NAME,
     USER_CACHE_DIR,
     USER_CONFIG_DIR,
     USER_DATA_DIR,
@@ -42,6 +44,76 @@ def _load_dotenv(override: bool = False):
         dotenv_path=env_path,
         override=override,
     )
+
+
+# 定义配置字典
+LOGGING_CONFIG = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    # 1. 格式器：定义日志长什么样
+    "formatters": {
+        "standard": {
+            "format": "[%(asctime)s] [%(levelname)s] [%(module)s:%(funcName)s:%(lineno)d] %(message)s",
+            "datefmt": "%Y-%m-%d %H:%M:%S",
+        },
+        "simple": {
+            "format": "%(message)s",  # Rich 会自动加时间，这里简单点
+        },
+    },
+    # 2. 处理器：定义日志去哪里
+    "handlers": {
+        "console": {
+            "class": "rich.logging.RichHandler",
+            "level": "INFO",
+            "formatter": "simple",
+            "rich_tracebacks": True,
+            "show_path": False,
+        },
+        "file": {
+            "class": "logging.FileHandler",
+            "level": "DEBUG",
+            "formatter": "standard",
+            "filename": str(
+                USER_LOG_DIR / LOG_FILENAME
+            ),  # 这里建议用 platformdirs 动态获取路径
+            "encoding": "utf-8",
+        },
+    },
+    # 3. 定义 Loggers
+    "loggers": {
+        # A. 你的项目 Logger (fix-compile)
+        PROJECT_NAME: {
+            "handlers": ["console", "file"],
+            "level": "DEBUG",  # WILL BE OVERRIDED IN setup_logging
+            "propagate": False,  # 关键：不向上传递给 root，防止重复打印
+        },
+        # B. 根 Logger (所有第三方库的兜底配置)
+        "root": {
+            "handlers": ["console", "file"],
+            "level": "WARNING",  # 第三方库只报 Warning 以上的错
+        },
+        # C. (可选) 如果你想看 docker 的详细日志，可以单独配置它
+        "docker": {
+            "handlers": ["file"],  # docker 日志只写文件，不打扰屏幕
+            "level": "DEBUG",
+            "propagate": False,
+        },
+    },
+}
+
+
+def setup_logging(log_level: str):
+    """Setup logging configuration."""
+    if not USER_LOG_DIR.exists():
+        ui.error(
+            f"Log directory {USER_LOG_DIR} does not exist. Likely config not loaded."
+        )
+        raise FileNotFoundError(f"Log directory {USER_LOG_DIR} does not exist.")
+
+    LOGGING_CONFIG["loggers"][PROJECT_NAME]["level"] = log_level.upper()
+    logging.config.dictConfig(LOGGING_CONFIG)
+    ui.info(f"Logging initialized with level {log_level}")
+    ui.info(f"Log file: {USER_LOG_DIR / LOG_FILENAME}")
 
 
 class DirConfigs(BaseModel):
@@ -121,6 +193,9 @@ class ConfigService:
             if isinstance(path, Path) and not path.exists():
                 path.mkdir(parents=True, exist_ok=True)
 
+        # only log file's file name contains path components
+        self._dir_settings.log_file.parent.mkdir(parents=True, exist_ok=True)
+
     def load_config(self, *, dev_mode: bool = False, **kwargs):
         """加载配置"""
         if dev_mode:
@@ -137,10 +212,16 @@ class ConfigService:
             try:
                 with config_file.open("r", encoding="utf-8") as f:
                     data = yaml.safe_load(f)
-                    for key, value in data.items():
-                        key = key.upper()
-                        if hasattr(self._settings, key):
-                            setattr(self._settings, key, value)
+                    _profile_settings = Configs.model_validate(data)
+                    kv_pairs = _profile_settings.model_dump(
+                        exclude={"dir_configs"}
+                    ).items()
+                    ui.debug(f"Config file key-values: {kv_pairs}")
+
+                    for key, value in kv_pairs:
+                        setattr(self._settings, key, value)
+                        ui.debug(f"Loaded config {key} from file")
+
             except Exception as e:
                 ui.error(f"Failed to load config file {config_file}: {e}")
                 raise
@@ -156,6 +237,8 @@ class ConfigService:
             ui.error(f"Failed to override config with kwargs: {e}")
             raise
 
+        setup_logging(self._settings.LOG_LEVEL)
+
     @property
     def config(self) -> Configs:
         """对外暴露静态配置"""
@@ -168,9 +251,14 @@ class ConfigService:
     def save_config(self):
         """保存当前配置到文件 (YAML 格式)"""
 
+        dump_settings = self._settings.model_dump(exclude={"dir_configs"})
+        dump_settings["OPENAI_API_KEY"] = dump_settings[
+            "OPENAI_API_KEY"
+        ].get_secret_value()  # decrypt for saving
+
         config_path = self._dir_settings.config_file
         with config_path.open("w", encoding="utf-8") as f:
-            yaml.dump(self._settings.model_dump(exclude={"dir_configs"}), f)
+            yaml.dump(dump_settings, f)
 
 
 # ---------------------------------------------------------

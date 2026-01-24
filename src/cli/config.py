@@ -112,14 +112,14 @@ def config_delete(
         raise typer.Exit(1)
 
 
-@config_app.command(name="path")
-def config_path():
-    """Show configuration file and directory paths."""
+@config_app.command(name="profile")
+def config_profile():
+    """Show configuration profile."""
     config_service.load_config()
     dir_config = config_service.config.dir_configs
 
     table = Table(
-        title="Configuration Paths", show_header=True, header_style="bold cyan"
+        title="Configuration Profile", show_header=True, header_style="bold cyan"
     )
     table.add_column("Type", style="green")
     table.add_column("Path", style="white")
@@ -132,4 +132,9 @@ def config_path():
     table.add_row("Config Directory", str(config_dir))
 
     console.print(table)
-    info(f"File exists: {config_file.exists()}")
+
+    if config_file.exists():
+        info(f"Config file exists at: {config_file}")
+    else:
+        info(f"Create config file at: {config_file}")
+        config_service.save_config()
