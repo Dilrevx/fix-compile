@@ -23,7 +23,7 @@ app = typer.Typer(
     no_args_is_help=True,
 )
 
-from cli.config import config_app  # noqa: E402
+from cli.sub_typers.config import config_app  # noqa: E402
 
 app.add_typer(config_app, name="config")
 
@@ -117,9 +117,7 @@ def fix(
         confidence_color = (
             "green"
             if confidence_pct >= 80
-            else "yellow"
-            if confidence_pct >= 60
-            else "red"
+            else "yellow" if confidence_pct >= 60 else "red"
         )
         console.print(
             f"Confidence Score: [{confidence_color}]{confidence_pct}%[/{confidence_color}]"
@@ -127,7 +125,7 @@ def fix(
 
         # Save if output path is specified
         if output:
-            save_result(result.fixed_dockerfile, output)
+            pass
         else:
             info("Use --output to save the fixed Dockerfile")
 
