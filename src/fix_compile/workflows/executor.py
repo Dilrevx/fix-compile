@@ -7,7 +7,7 @@ from typing import Optional
 
 from rich.console import Console
 
-from .schema import CommandResult, DockerBuildConfig, DockerRunConfig, FixSuggestion
+from ..schema import CommandResult, DockerBuildConfig, DockerRunConfig, FixSuggestion
 
 console = Console()
 

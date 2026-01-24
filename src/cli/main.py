@@ -4,35 +4,28 @@ from pathlib import Path
 from typing import Optional
 
 import typer
-from dotenv import load_dotenv
 from rich.panel import Panel
 
 from fix_compile import DockerfileFixer
-
-from .utils import (
-    CLIError,
+from fix_compile.constants import PROJECT_NAME
+from fix_compile.utils.ui import (
     console,
+    info,
     print_comparison,
     print_dockerfile,
-    print_error,
-    print_info,
-    print_success,
-    print_warning,
-    save_result,
+    success,
+    warning,
 )
-
-# Load environment variables from .env file
-load_dotenv(
-    dotenv_path=".env",
-    override=False,
-)
-
 
 app = typer.Typer(
-    name="fix-compile",
+    name=PROJECT_NAME,
     help="Fix Dockerfile build errors using LLM and LangChain",
     no_args_is_help=True,
 )
+
+from cli.config import config_app  # noqa: E402
+
+app.add_typer(config_app, name="config")
 
 
 @app.command()
@@ -83,19 +76,19 @@ def fix(
     """
     try:
         if verbose:
-            print_info(f"Loading Dockerfile from {dockerfile}")
+            info(f"Loading Dockerfile from {dockerfile}")
 
         # Load the Dockerfile
         # dockerfile_content = load_file(dockerfile)
 
         if verbose:
-            print_info("Initializing DockerfileFixer")
+            info("Initializing DockerfileFixer")
 
         # Initialize the fixer
         fixer = DockerfileFixer()
 
         if verbose:
-            print_info(f"Analyzing error: {error[:100]}...")
+            info(f"Analyzing error: {error[:100]}...")
 
         # Fix the Dockerfile
         result = fixer.fix(
@@ -136,16 +129,13 @@ def fix(
         if output:
             save_result(result.fixed_dockerfile, output)
         else:
-            print_info("Use --output to save the fixed Dockerfile")
+            info("Use --output to save the fixed Dockerfile")
 
         console.print()
-        print_success("Done!")
+        success("Done!")
 
-    except CLIError as e:
-        print_error(str(e))
-        raise typer.Exit(code=1)
     except Exception as e:
-        print_error(f"Unexpected error: {e}")
+        error(f"Unexpected error: {e}")
         if verbose:
             import traceback
 
@@ -181,7 +171,7 @@ def analyze(
             --error "COPY failed: stat /app/file.txt: no such file or directory"
     """
     try:
-        from fix_compile.analyzer import DockerfileAnalyzer
+        from fix_compile.workflows.analyzer import DockerfileAnalyzer
 
         problem = DockerfileAnalyzer.analyze(
             dockerfile_path=str(dockerfile),
@@ -198,16 +188,16 @@ def analyze(
         console.print()
 
     except Exception as e:
-        print_error(f"Analysis failed: {e}")
+        error(f"Analysis failed: {e}")
         raise typer.Exit(code=1)
 
 
 @app.command()
 def version() -> None:
     """Show version information."""
-    from fix_compile import __version__
+    from fix_compile import __name__, __version__
 
-    console.print(f"fix-compile version {__version__}")
+    console.print(f"{__name__} version {__version__}")
 
 
 def main() -> None:
@@ -216,7 +206,7 @@ def main() -> None:
         app()
     except KeyboardInterrupt:
         console.print()
-        print_warning("Interrupted by user")
+        warning("Interrupted by user")
         raise typer.Exit(code=130)
 
 

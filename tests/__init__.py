@@ -1,7 +1,7 @@
 """Tests for the fix_compile package."""
 
 from fix_compile.models import DockerfileProblem, ProblemType
-from fix_compile.analyzer import DockerfileAnalyzer
+from fix_compile.workflows.analyzer import DockerfileAnalyzer
 
 
 def test_analyzer_identifies_path_not_found():

@@ -4,11 +4,11 @@ import os
 from typing import Optional
 
 from langchain_core.language_models import BaseChatModel
-from langchain_openai import ChatOpenAI
 from langchain_core.prompts import PromptTemplate
+from langchain_openai import ChatOpenAI
 
+from ..models import DockerfileProblem, FixResult
 from .analyzer import DockerfileAnalyzer
-from .models import DockerfileProblem, FixResult
 
 
 class DockerfileFixer:
@@ -134,9 +134,9 @@ Provide the fixed Dockerfile and a brief explanation of the changes made."""
         formatted_prompt = prompt.format(
             dockerfile_path=problem.dockerfile_path,
             build_context=problem.build_context or "root",
-            problem_type=problem.problem_type.value
-            if problem.problem_type
-            else "unknown",
+            problem_type=(
+                problem.problem_type.value if problem.problem_type else "unknown"
+            ),
             original_dockerfile=original_dockerfile,
             error_message=problem.error_message,
         )

@@ -7,8 +7,7 @@ from openai import OpenAI
 from pydantic import ValidationError
 from rich.console import Console
 
-from .config import config
-from .schema import AnalysisContext, FixSuggestion
+from ..schema import AnalysisContext, FixSuggestion
 
 console = Console()
 
@@ -167,7 +166,7 @@ You MUST respond with valid JSON matching this exact schema:
         Returns:
             FixSuggestion
         """
-        from .schema import OperationType
+        from ..schema import OperationType
 
         context = AnalysisContext(
             dockerfile_content=dockerfile_content,

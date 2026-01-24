@@ -1,22 +1,11 @@
 """Fix Docker build and runtime errors using LLM."""
 
-__version__ = "0.2.0"
+import fix_compile.constants
 
-from .brain import Analyzer
-from .config import config
-from .config_manager import (
-    delete_config_value,
-    get_config_dir_path,
-    get_config_file_path,
-    list_all_config,
-    load_config_file,
-    save_config_file,
-    set_config_value,
-    validate_config_key,
-)
-from .executor import Executor
-from .fixer import DockerfileFixer, FixResult
-from .observability import get_phoenix_status, setup_phoenix_tracing
+__version__ = fix_compile.constants.__version__
+
+from fix_compile.config import ConfigService
+
 from .schema import (
     AnalysisContext,
     CommandResult,
@@ -24,6 +13,9 @@ from .schema import (
     DockerRunConfig,
     FixSuggestion,
 )
+from .workflows.brain import Analyzer
+from .workflows.executor import Executor
+from .workflows.fixer import DockerfileFixer, FixResult
 
 __all__ = [
     "Analyzer",
