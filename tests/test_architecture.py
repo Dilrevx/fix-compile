@@ -51,6 +51,7 @@ class TestSchema:
             stderr="",
             success=True,
             command="docker build .",
+            cwd="/home/user/project",
         )
 
         assert result.success
@@ -64,6 +65,7 @@ class TestSchema:
             stderr="Build failed",
             success=False,
             command="docker build .",
+            cwd="/home/user/project",
         )
 
         assert not result.success

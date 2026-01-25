@@ -96,6 +96,7 @@ class CommandResult(BaseModel):
     stderr: str = Field(default="", description="Standard error")
     success: bool = Field(description="Whether command succeeded")
     command: str = Field(description="Command that was executed")
+    cwd: str = Field(default="", description="Working directory where command was run")
 
     @property
     def output(self) -> str:

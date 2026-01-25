@@ -1,15 +1,19 @@
 """Executor module - The Hand (subprocess and file operations)."""
 
+import shlex
 import subprocess
 import sys
 from pathlib import Path
 from typing import Optional
 
-from rich.console import Console
 
-from ..schema import CommandResult, DockerBuildConfig, DockerRunConfig, FixSuggestion
-
-console = Console()
+from fix_compile.schema import (
+    CommandResult,
+    DockerBuildConfig,
+    DockerRunConfig,
+    FixSuggestion,
+)
+from fix_compile.utils import ui
 
 
 class ExecutionError(Exception):
@@ -35,8 +39,8 @@ class Executor:
         """
         self.verbose = verbose
 
-    def run_command(
-        self, cmd: list[str], cwd: Optional[str] = None, stream: bool = True
+    def execute(
+        self, cmd: list[str] | str, cwd: Optional[str] = None, stream: bool = True
     ) -> CommandResult:
         """
         Execute a shell command and capture output.
@@ -49,10 +53,14 @@ class Executor:
         Returns:
             CommandResult with exit code and captured output
         """
-        cmd_str = " ".join(cmd)
+        if isinstance(cmd, list):
+            cmd_str = shlex.join(cmd)
+            # cmd_str = subprocess.list2cmdline(cmd) # subprocess api
+        else:
+            cmd = cmd.strip()
+            cmd_str = cmd
 
-        if self.verbose:
-            console.print(f"[dim]Running: {cmd_str}[/dim]")
+        ui.info(f"Executing command: [bold]{cmd_str}[/bold]")
 
         try:
             if stream:
@@ -75,7 +83,7 @@ class Executor:
                     stdout_line = process.stdout.readline()
                     if stdout_line:
                         stdout_lines.append(stdout_line)
-                        sys.stdout.write(stdout_line)
+                        ui.info(stdout_line.rstrip())
                         sys.stdout.flush()
 
                     # Check if process is done
@@ -109,6 +117,7 @@ class Executor:
                 stderr=stderr,
                 success=(exit_code == 0),
                 command=cmd_str,
+                cwd=cwd or str(Path.cwd()),
             )
 
         except FileNotFoundError as e:
@@ -142,7 +151,7 @@ class Executor:
 
         cmd.append(config.context)
 
-        return self.run_command(cmd, stream=True)
+        return self.execute(cmd, stream=True)
 
     def docker_run(self, config: DockerRunConfig) -> CommandResult:
         """
@@ -165,7 +174,7 @@ class Executor:
         cmd.extend(config.args)
         cmd.append(config.image)
 
-        return self.run_command(cmd, stream=True)
+        return self.execute(cmd, stream=True)
 
     def read_file(self, file_path: str) -> str:
         """

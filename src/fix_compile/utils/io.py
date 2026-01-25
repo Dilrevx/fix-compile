@@ -1,7 +1,10 @@
+import hashlib
 import json
 from pathlib import Path
 from typing import Any, Dict
 
+from fix_compile.config import DirConfigs
+from fix_compile.schema import CommandResult
 from fix_compile.utils import ui
 
 # ---------------------------------------------------------
@@ -26,20 +29,36 @@ def load_file(file_path: Path) -> str:
         raise
     except IOError as e:
         msg = f"Failed to read file {file_path}: {e}"
-        ui.exception(msg)  # Log stack trace
+        ui.error(msg)
         raise
 
 
-def save_result(content: str, output_path: Path) -> None:
+def save_exec_output(content: CommandResult, dir_config: DirConfigs) -> None:
     """Save content to file and print success."""
-    try:
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_path.write_text(content, encoding="utf-8")
+    cmd_hash = hashlib.sha256(
+        f"{content.command}|{content.cwd}".encode("utf-8")
+    ).hexdigest()[:8]
+    output_dir = dir_config.cache_dir / cmd_hash
+    stdout_file = output_dir / "stdout.txt"
+    stderr_file = output_dir / "stderr.txt"
+    meta_file = output_dir / "meta.json"
 
+    try:
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        stdout_file.write_text(content.stdout, encoding="utf-8")
+        stderr_file.write_text(content.stderr, encoding="utf-8")
+        meta_file.write_text(
+            content.model_dump_json(
+                indent=2,
+                ensure_ascii=False,
+                exclude={"stdout", "stderr"},
+            ),
+            encoding="utf-8",
+        )
         # 复用 print_success 实现双写
-        ui.success(f"Saved result to {output_path}")
+        ui.success(f"Saved result to {output_dir}")
 
     except IOError as e:
-        msg = f"Failed to save file {output_path}: {e}"
-        ui.exception(msg)
-        raise
+        msg = f"Failed to save file {output_dir}: {e}"
+        ui.error(msg)

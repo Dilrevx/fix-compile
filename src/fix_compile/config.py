@@ -200,7 +200,10 @@ class ConfigService:
         self._dir_settings.log_file.parent.mkdir(parents=True, exist_ok=True)
 
     def load_config(self, *, dev_mode: bool = False, **kwargs):
-        """加载配置"""
+        """
+        加载配置
+        Priority: cli settings > config profile > export environment variables > .env file (on dev mode)
+        """
         if dev_mode:
             _load_dotenv(override=False)
 

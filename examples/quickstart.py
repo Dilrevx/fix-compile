@@ -45,7 +45,7 @@ print("=" * 60)
 executor = Executor(verbose=True)
 
 # Check if Docker is available
-result = executor.run_command(["docker", "--version"], stream=False)
+result = executor.execute(["docker", "--version"], stream=False)
 print(f"\nDocker version: {result.stdout.strip()}")
 print(f"Command succeeded: {result.success}")
 
