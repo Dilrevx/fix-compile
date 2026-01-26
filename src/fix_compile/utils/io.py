@@ -1,9 +1,9 @@
 import hashlib
 import json
+import shlex
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
-from fix_compile.config import DirConfigs
 from fix_compile.schema import CommandResult
 from fix_compile.utils import ui
 
@@ -33,12 +33,25 @@ def load_file(file_path: Path) -> str:
         raise
 
 
-def save_exec_output(content: CommandResult, dir_config: DirConfigs) -> None:
-    """Save content to file and print success."""
-    cmd_hash = hashlib.sha256(
-        f"{content.command}|{content.cwd}".encode("utf-8")
-    ).hexdigest()[:8]
-    output_dir = dir_config.cache_dir / cmd_hash
+def cmd2hash(cmd: list[str] | str, cwd: Path | str) -> str:
+    """Generate a SHA256 hash for a command and cwd. Used to locate log dirs."""
+    if isinstance(cmd, list):
+        cmd = shlex.join(cmd)
+    if isinstance(cwd, Path):
+        cwd = str(cwd.resolve())
+
+    hash_input = f"{cmd}|{cwd}"
+    return hashlib.sha256(hash_input.encode("utf-8")).hexdigest()[:8]
+
+
+def save_exec_output(
+    content: CommandResult,
+    output_dir: Optional[Path],
+) -> None:
+    """
+    Save content to output_dir/ and print success.
+    """
+
     stdout_file = output_dir / "stdout.txt"
     stderr_file = output_dir / "stderr.txt"
     meta_file = output_dir / "meta.json"

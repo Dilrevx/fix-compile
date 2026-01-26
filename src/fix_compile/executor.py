@@ -6,7 +6,6 @@ import sys
 from pathlib import Path
 from typing import Optional
 
-
 from fix_compile.schema import (
     CommandResult,
     DockerBuildConfig,
@@ -40,7 +39,7 @@ class Executor:
         self.verbose = verbose
 
     def execute(
-        self, cmd: list[str] | str, cwd: Optional[str] = None, stream: bool = True
+        self, cmd: list[str], cwd: Optional[str] = None, stream: bool = True
     ) -> CommandResult:
         """
         Execute a shell command and capture output.
@@ -53,12 +52,8 @@ class Executor:
         Returns:
             CommandResult with exit code and captured output
         """
-        if isinstance(cmd, list):
-            cmd_str = shlex.join(cmd)
-            # cmd_str = subprocess.list2cmdline(cmd) # subprocess api
-        else:
-            cmd = cmd.strip()
-            cmd_str = cmd
+        cmd_str = shlex.join(cmd)
+        # cmd_str = subprocess.list2cmdline(cmd) # subprocess api
 
         ui.info(f"Executing command: [bold]{cmd_str}[/bold]")
 
@@ -214,7 +209,7 @@ class Executor:
             path.write_text(content, encoding="utf-8")
 
             if self.verbose:
-                console.print(f"[green]✓[/green] Wrote {file_path}")
+                ui.debug(f"[green]✓[/green] Wrote {file_path}")
 
         except Exception as e:
             raise ExecutionError(f"Failed to write {file_path}: {e}")
@@ -229,21 +224,21 @@ class Executor:
         Raises:
             ExecutionError: If fix cannot be applied
         """
-        console.print(f"\n[yellow]Applying fix to {fix.file_path}...[/yellow]")
-        console.print(f"[dim]{fix.changes_summary}[/dim]")
+        ui.info(f"\n[yellow]Applying fix to {fix.file_path}...[/yellow]")
+        ui.info(f"[dim]{fix.changes_summary}[/dim]")
 
         # Create backup
         backup_path = f"{fix.file_path}.backup"
         try:
             original_content = self.read_file(fix.file_path)
             self.write_file(backup_path, original_content)
-            console.print(f"[dim]Backup created: {backup_path}[/dim]")
+            ui.info(f"[dim]Backup created: {backup_path}[/dim]")
         except ExecutionError:
-            console.print("[yellow]Warning: Could not create backup[/yellow]")
+            ui.info("[yellow]Warning: Could not create backup[/yellow]")
 
         # Apply fix
         self.write_file(fix.file_path, fix.new_content)
-        console.print("[green]✓ Fix applied successfully[/green]\n")
+        ui.info("[green]✓ Fix applied successfully[/green]\n")
 
     def file_exists(self, file_path: str) -> bool:
         """Check if file exists."""

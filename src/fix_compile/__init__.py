@@ -6,6 +6,7 @@ __version__ = fix_compile.constants.__version__
 
 from fix_compile.config import ConfigService
 
+from .executor import Executor
 from .schema import (
     AnalysisContext,
     CommandResult,
@@ -14,7 +15,6 @@ from .schema import (
     FixSuggestion,
 )
 from .workflows.brain import Analyzer
-from .workflows.executor import Executor
 from .workflows.fixer import DockerfileFixer, FixResult
 
 __all__ = [
@@ -39,4 +39,5 @@ __all__ = [
     "validate_config_key",
     "get_config_file_path",
     "get_config_dir_path",
+    "ConfigService",
 ]

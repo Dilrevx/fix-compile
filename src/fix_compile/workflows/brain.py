@@ -7,6 +7,8 @@ from openai import OpenAI
 from pydantic import ValidationError
 from rich.console import Console
 
+from fix_compile.config import config_service
+
 from ..schema import AnalysisContext, FixSuggestion
 
 console = Console()
@@ -55,12 +57,14 @@ You MUST respond with valid JSON matching this exact schema:
             model: Model name to use (defaults to config)
             api_key: API key (defaults to config)
         """
-        self.model = model or config.FIXER_MODEL
-        api_key_value = api_key or config.OPENAI_API_KEY.get_secret_value()
+
+        self.config = config_service.config
+        self.model = model or self.config.FIXER_MODEL
+        api_key_value = api_key or self.config.OPENAI_API_KEY.get_secret_value()
 
         self.client = OpenAI(
             api_key=api_key_value,
-            base_url=config.OPENAI_API_BASE,
+            base_url=self.config.OPENAI_API_BASE,
         )
 
     def analyze(self, context: AnalysisContext) -> FixSuggestion:
@@ -91,7 +95,7 @@ You MUST respond with valid JSON matching this exact schema:
                 ],
                 response_format={"type": "json_object"},
                 temperature=0.2,
-                max_tokens=config.MAX_TOKENS,
+                max_tokens=self.config.MAX_TOKENS,
             )
 
             # Parse response

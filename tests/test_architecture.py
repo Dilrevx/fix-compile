@@ -110,14 +110,14 @@ class TestExecutor:
 
     def test_executor_import(self):
         """Test that executor can be imported."""
-        from fix_compile.workflows.executor import Executor
+        from fix_compile.executor import Executor
 
         executor = Executor(verbose=False)
         assert executor is not None
 
     def test_executor_file_exists(self):
         """Test file exists check."""
-        from fix_compile.workflows.executor import Executor
+        from fix_compile.executor import Executor
 
         executor = Executor()
         # This file should exist
