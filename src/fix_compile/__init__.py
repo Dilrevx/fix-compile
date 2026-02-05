@@ -14,7 +14,7 @@ from .schema import (
     FixSuggestion,
     GeneralAnalysisContext,
 )
-from .workflows.docker_fixer import DockerfileFixer, FixResult
+from .workflows.docker_fixer import DockerFixer
 from .workflows.general_fixer import GeneralFixer
 
 __all__ = [
@@ -26,8 +26,7 @@ __all__ = [
     "CommandResult",
     "DockerBuildConfig",
     "DockerRunConfig",
-    "DockerfileFixer",
-    "FixResult",
+    "DockerFixer",
     "setup_phoenix_tracing",
     "get_phoenix_status",
     "set_config_value",

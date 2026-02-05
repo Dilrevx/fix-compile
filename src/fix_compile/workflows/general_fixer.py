@@ -9,87 +9,10 @@ from langchain_openai import ChatOpenAI
 from pydantic import ValidationError
 
 from fix_compile.config import config_service
+from fix_compile.tools import execute_command
 from fix_compile.utils import ui
 
 from ..schema import FixSuggestion, FixType, GeneralAnalysisContext
-
-# ============================================================================
-# File System Tools
-# ============================================================================
-
-
-def read_file_content(file_path: str, cwd: str = ".") -> str:
-    """Read content of a file from the specified working directory.
-
-    Args:
-        file_path: Path to the file (relative to cwd)
-        cwd: Current working directory
-
-    Returns:
-        File content as string
-
-    Raises:
-        FileNotFoundError: If file does not exist
-        IOError: If file cannot be read
-    """
-    full_path = Path(cwd) / file_path
-    if not full_path.exists():
-        raise FileNotFoundError(f"File not found: {file_path}")
-    return full_path.read_text(encoding="utf-8")
-
-
-def list_files_in_directory(dir_path: str = ".", cwd: str = ".") -> list[str]:
-    """List files in a directory.
-
-    Args:
-        dir_path: Directory path (relative to cwd), default "."
-        cwd: Current working directory
-
-    Returns:
-        List of file names/paths
-    """
-    full_path = Path(cwd) / dir_path
-    if not full_path.exists():
-        return []
-
-    files = []
-    for item in full_path.iterdir():
-        rel_path = item.relative_to(cwd)
-        files.append(str(rel_path))
-    return sorted(files)
-
-
-def get_file_info(file_path: str, cwd: str = ".") -> dict:
-    """Get information about a file.
-
-    Args:
-        file_path: Path to the file
-        cwd: Current working directory
-
-    Returns:
-        Dictionary with file info (exists, is_dir, size, lines)
-    """
-    full_path = Path(cwd) / file_path
-
-    if not full_path.exists():
-        return {"exists": False, "path": file_path}
-
-    info = {
-        "exists": True,
-        "path": file_path,
-        "is_dir": full_path.is_dir(),
-        "size_bytes": full_path.stat().st_size if full_path.is_file() else None,
-    }
-
-    if full_path.is_file():
-        try:
-            content = full_path.read_text(encoding="utf-8")
-            info["lines"] = len(content.splitlines())
-        except Exception:
-            info["lines"] = None
-
-    return info
-
 
 # ============================================================================
 # GeneralFixer Class
@@ -261,11 +184,19 @@ For DOCKER fixes:
             f"Working Directory: {context.cwd}",
         ]
 
-        # Try to list files in the current directory
+        # Try to list files in the current directory using ls command
         try:
-            files = list_files_in_directory(".", cwd=context.cwd)
-            if files:
-                prompt_parts.append(f"Files in cwd (first 20): {files[:20]}")
+            ls_result = execute_command("ls -la", cwd=context.cwd)
+            if ls_result["success"] and ls_result["output"]:
+                # Limit output to avoid token overflow
+                lines = ls_result["output"].splitlines()
+                if len(lines) > 25:
+                    output = (
+                        "\n".join(lines[:25]) + f"\n... ({len(lines) - 25} more items)"
+                    )
+                else:
+                    output = ls_result["output"]
+                prompt_parts.append(f"Directory listing:\n{output}")
         except Exception:
             pass
 
