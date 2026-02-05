@@ -54,7 +54,7 @@ def save_exec_output(
 
     stdout_file = output_dir / "stdout.txt"
     stderr_file = output_dir / "stderr.txt"
-    meta_file = output_dir / "meta.json"
+    meta_file = output_dir / "metadata.json"
 
     try:
         output_dir.mkdir(parents=True, exist_ok=True)

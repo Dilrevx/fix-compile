@@ -110,7 +110,7 @@ def fix_command(
 
     Resolution order for the log:
     1) --text if provided
-    2) --log-dir if points to an existing directory (read meta.json, stdout.txt or stderr.txt in it)
+    2) --log-dir if points to an existing directory (read metadata.json, stdout.txt or stderr.txt in it)
     3) --cmd: if provided, try reading --log-dir first; if missing, execute cmd, save output, and use it.
     """
     config_service.load_config(dev_mode=dev)
@@ -130,10 +130,10 @@ def fix_command(
             if log_dir.is_file():
                 error_log = log_dir.read_text(encoding="utf-8")
             else:
-                meta_path: Path = log_dir / "meta.json"
+                meta_path: Path = log_dir / "metadata.json"
                 if not meta_path.exists():
                     error(
-                        "Log directory missing meta.json. Provide a valid save_exec_output folder."
+                        "Log directory missing metadata.json. Provide a valid save_exec_output folder."
                     )
                     raise typer.Exit(1)
 
