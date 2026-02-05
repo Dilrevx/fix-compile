@@ -10,7 +10,6 @@ from cli.commands import config_app, docker_app
 from fix_compile.config import config_service
 from fix_compile.constants import PROJECT_NAME
 from fix_compile.executor import ExecutionError, Executor
-from fix_compile.schema import OperationType
 from fix_compile.utils.io import cmd2hash, save_exec_output
 from fix_compile.utils.ui import (
     console,
@@ -20,7 +19,7 @@ from fix_compile.utils.ui import (
     success,
     warning,
 )
-from fix_compile.workflows.brain import AnalysisError, Analyzer
+from fix_compile.workflows.general_fixer import GeneralFixer
 
 app = typer.Typer(
     name=PROJECT_NAME,
@@ -116,7 +115,7 @@ def fix_command(
     config_service.load_config(dev_mode=dev)
     dir_config = config_service.config.dir_configs
 
-    analyzer = Analyzer()
+    general_fixer = GeneralFixer()
     executor = Executor()
 
     try:
@@ -168,20 +167,35 @@ def fix_command(
         if not error_log:
             warning("error log is empty. Maybe only non zero exit code?")
 
-        # Perform analysis with minimal dockerfile context (generic mode)
-        suggestion = analyzer.quick_analyze(
-            dockerfile_content="",
-            error_log=error_log,
-            operation_type=OperationType.BUILD,
+        # Perform analysis with current working directory
+        suggestion = general_fixer.quick_analyze(
+            error_log=error_log, cwd=str(cwd or Path.cwd())
         )
-        # Show suggestion content and summary
-        print_dockerfile(suggestion.new_content, title="Suggested Content")
+
+        # Show suggestion based on type
+        info(f"Reason: {suggestion.reason}\n")
+        info(f"Fix Type: {suggestion.fix_type.value}\n")
+
+        if suggestion.fix_type.value == "command":
+            print_dockerfile(suggestion.command, title="Suggested Command")
+            if suggestion.command_explanation:
+                info(f"Explanation: {suggestion.command_explanation}\n")
+        elif suggestion.fix_type.value == "file":
+            info(f"File: {suggestion.file_path}\n")
+            if suggestion.file_explanation:
+                info(f"Explanation: {suggestion.file_explanation}\n")
+            print_dockerfile(suggestion.new_content, title="Suggested File Content")
+        elif suggestion.fix_type.value == "docker":
+            info(f"Dockerfile: {suggestion.dockerfile_path}\n")
+            print_dockerfile(
+                suggestion.dockerfile_content, title="Suggested Dockerfile"
+            )
+
         info(
-            f"Reason: {suggestion.reason}\n\n"
             f"Changes: {suggestion.changes_summary}\n\n"
             f"Confidence: {suggestion.confidence:.0%}"
         )
-    except AnalysisError as e:
+    except Exception as e:
         error(f"Analysis failed: {e}")
         raise typer.Exit(1)
     except ExecutionError as e:

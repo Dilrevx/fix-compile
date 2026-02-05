@@ -1,5 +1,6 @@
 """Data models and schemas for fix-compile."""
 
+from dataclasses import dataclass
 from enum import Enum
 from typing import Optional
 
@@ -8,6 +9,18 @@ from pydantic import BaseModel, Field
 # ============================================================================
 # Enums
 # ============================================================================
+
+
+class ProblemType(str, Enum):
+    """Types of Dockerfile build problems."""
+
+    PATH_NOT_FOUND = "path_not_found"
+    PERMISSION_DENIED = "permission_denied"
+    INVALID_SYNTAX = "invalid_syntax"
+    MISSING_DEPENDENCY = "missing_dependency"
+    IMAGE_NOT_FOUND = "image_not_found"
+    BUILD_CONTEXT_ERROR = "build_context_error"
+    UNKNOWN = "unknown"
 
 
 class OperationType(str, Enum):
@@ -25,12 +38,56 @@ class FixStatus(str, Enum):
     NEEDS_RETRY = "needs_retry"
 
 
+class FixType(str, Enum):
+    """Type of fix suggestion."""
+
+    COMMAND = "command"  # Fix by modifying/running a command
+    FILE = "file"  # Fix by modifying file content
+    DOCKER = "docker"  # Docker-specific fix (dockerfile)
+
+
+# ============================================================================
+# Dataclass Models
+# ============================================================================
+
+
+@dataclass
+class DockerfileProblem:
+    """Represents a Dockerfile build problem."""
+
+    dockerfile_path: str
+    error_message: str
+    problem_type: Optional[ProblemType] = None
+    build_context: Optional[str] = None
+
+
+@dataclass
+class FixResult:
+    """Result of a Dockerfile fix attempt."""
+
+    success: bool
+    original_dockerfile: str
+    fixed_dockerfile: str
+    explanation: str
+    confidence: float  # 0.0 to 1.0
+
+
 # ============================================================================
 # Input Models (for Analyzer)
 # ============================================================================
 
 
-class AnalysisContext(BaseModel):
+class GeneralAnalysisContext(BaseModel):
+    """Input context for general analysis."""
+
+    error_log: str = Field(description="Build/run error log")
+    cwd: str = Field(default=".", description="Current working directory")
+    previous_attempts: int = Field(
+        default=0, description="Number of previous fix attempts"
+    )
+
+
+class DockerAnalysisContext(BaseModel):
     """Input context for LLM analysis (The Brain)."""
 
     dockerfile_content: str = Field(description="Content of the Dockerfile")
@@ -64,8 +121,35 @@ class FixSuggestion(BaseModel):
     """Fix suggestion from LLM (The Brain's output)."""
 
     reason: str = Field(description="Explanation of why this fix is needed")
-    file_path: str = Field(description="Path to the file to be modified")
-    new_content: str = Field(description="New content for the file")
+    fix_type: FixType = Field(description="Type of fix (command, file, or docker)")
+
+    # For command fixes
+    command: Optional[str] = Field(
+        default=None, description="Command to execute or modify"
+    )
+    command_explanation: Optional[str] = Field(
+        default=None, description="Explanation of command fix"
+    )
+
+    # For file fixes
+    file_path: Optional[str] = Field(
+        default=None, description="Path to file to be modified (relative to cwd)"
+    )
+    new_content: Optional[str] = Field(
+        default=None, description="New content for the file"
+    )
+    file_explanation: Optional[str] = Field(
+        default=None, description="Explanation of file fix"
+    )
+
+    # For docker fixes
+    dockerfile_path: Optional[str] = Field(
+        default=None, description="Path to Dockerfile"
+    )
+    dockerfile_content: Optional[str] = Field(
+        default=None, description="New Dockerfile content"
+    )
+
     confidence: float = Field(
         ge=0.0, le=1.0, description="Confidence score (0.0 to 1.0)"
     )
@@ -74,11 +158,13 @@ class FixSuggestion(BaseModel):
     class Config:
         json_schema_extra = {
             "example": {
-                "reason": "The base image is outdated and the package repository is no longer available",
-                "file_path": "Dockerfile",
-                "new_content": "FROM ubuntu:22.04\nRUN apt-get update",
+                "reason": "Missing package in dependencies",
+                "fix_type": "file",
+                "file_path": "requirements.txt",
+                "new_content": "numpy==1.24.0\npandas==2.0.0",
+                "file_explanation": "Added missing numpy and pandas packages",
                 "confidence": 0.85,
-                "changes_summary": "Updated base image from ubuntu:20.04 to ubuntu:22.04",
+                "changes_summary": "Updated requirements.txt with missing dependencies",
             }
         }
 

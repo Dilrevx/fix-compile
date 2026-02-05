@@ -1,6 +1,6 @@
 """Tests for the fix_compile package."""
 
-from fix_compile.models import DockerfileProblem, ProblemType
+from fix_compile.schema import DockerfileProblem, ProblemType
 from fix_compile.workflows.analyzer import DockerfileAnalyzer
 
 

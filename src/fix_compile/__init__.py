@@ -8,20 +8,20 @@ from fix_compile.config import ConfigService
 
 from .executor import Executor
 from .schema import (
-    AnalysisContext,
     CommandResult,
     DockerBuildConfig,
     DockerRunConfig,
     FixSuggestion,
+    GeneralAnalysisContext,
 )
-from .workflows.brain import Analyzer
-from .workflows.fixer import DockerfileFixer, FixResult
+from .workflows.docker_fixer import DockerfileFixer, FixResult
+from .workflows.general_fixer import GeneralFixer
 
 __all__ = [
-    "Analyzer",
+    "GeneralFixer",
     "Executor",
     "config",
-    "AnalysisContext",
+    "GeneralAnalysisContext",
     "FixSuggestion",
     "CommandResult",
     "DockerBuildConfig",

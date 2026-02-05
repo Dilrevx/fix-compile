@@ -3,10 +3,10 @@
 import pytest
 
 from fix_compile.schema import (
-    AnalysisContext,
     CommandResult,
     DockerBuildConfig,
     FixSuggestion,
+    GeneralAnalysisContext,
     LoopState,
     OperationType,
 )
@@ -17,7 +17,7 @@ class TestSchema:
 
     def test_analysis_context_creation(self):
         """Test creating an analysis context."""
-        context = AnalysisContext(
+        context = GeneralAnalysisContext(
             dockerfile_content="FROM ubuntu:22.04",
             error_log="Error: failed to build",
             operation_type=OperationType.BUILD,
@@ -131,16 +131,16 @@ class TestBrain:
 
     def test_analyzer_import(self):
         """Test that analyzer can be imported."""
-        from fix_compile.workflows.brain import Analyzer
+        from fix_compile.workflows.general_fixer import GeneralFixer
 
         # Don't initialize without API key
-        assert Analyzer is not None
+        assert GeneralFixer is not None
 
     def test_analyzer_prompt_building(self):
         """Test prompt building logic."""
 
         # Create a mock analyzer (don't call API)
-        context = AnalysisContext(
+        context = GeneralAnalysisContext(
             dockerfile_content="FROM ubuntu:20.04",
             error_log="Error occurred",
             operation_type=OperationType.BUILD,

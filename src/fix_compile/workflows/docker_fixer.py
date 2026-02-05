@@ -7,7 +7,7 @@ from langchain_core.language_models import BaseChatModel
 from langchain_core.prompts import PromptTemplate
 from langchain_openai import ChatOpenAI
 
-from ..models import DockerfileProblem, FixResult
+from ..schema import DockerfileProblem, FixResult
 from .analyzer import DockerfileAnalyzer
 
 

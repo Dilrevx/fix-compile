@@ -1,6 +1,6 @@
 """Quick start example for fix-compile."""
 
-from fix_compile import AnalysisContext, Executor, OperationType
+from fix_compile import Executor, GeneralAnalysisContext, OperationType
 
 # Example 1: Quick analysis
 print("=" * 60)
@@ -22,7 +22,7 @@ E: Failed to fetch http://archive.ubuntu.com/ubuntu/dists/focal/InRelease
 """
 
 # Create context
-context = AnalysisContext(
+context = GeneralAnalysisContext(
     dockerfile_content=dockerfile,
     error_log=error_log,
     operation_type=OperationType.BUILD,

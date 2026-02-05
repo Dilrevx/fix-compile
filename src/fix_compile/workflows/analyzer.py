@@ -3,7 +3,7 @@
 import re
 from typing import Optional
 
-from ..models import DockerfileProblem, ProblemType
+from ..schema import DockerfileProblem, ProblemType
 
 
 class DockerfileAnalyzer:

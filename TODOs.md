@@ -5,3 +5,8 @@
 - [] 目前先设计为 fix-compile docker 仅针对 dockerfile，后面在考虑扩展到 mvn（架构设计的时候需要注意）
 - [x] 把 main 的 cli 移动到 cli
 - [] fixer 需要能拿到源代码，因为报错信息不一定给出 trace
+
+
+## Dockerfile
+
+- []  版本间 output 会迁移，dockerfile 不通用
