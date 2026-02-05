@@ -1,5 +1,6 @@
 """Main CLI application for fix-compile (new unified CLI)."""
 
+import json
 import shlex
 from pathlib import Path
 from typing import List, Optional
@@ -115,7 +116,6 @@ def fix_command(
     config_service.load_config(dev_mode=dev)
     dir_config = config_service.config.dir_configs
 
-    general_fixer = GeneralFixer()
     executor = Executor()
 
     try:
@@ -130,11 +130,17 @@ def fix_command(
             if log_dir.is_file():
                 error_log = log_dir.read_text(encoding="utf-8")
             else:
-                if not (log_dir / "meta.json").exists():
+                meta_path: Path = log_dir / "meta.json"
+                if not meta_path.exists():
                     error(
                         "Log directory missing meta.json. Provide a valid save_exec_output folder."
                     )
                     raise typer.Exit(1)
+
+                raw_meta = meta_path.read_text(encoding="utf-8")
+                cmd = json.loads(raw_meta).get("command", "")
+                if not cwd:
+                    cwd = Path(json.loads(raw_meta).get("cwd", ""))
 
                 stdout_path = log_dir / "stdout.txt"
                 stderr_path = log_dir / "stderr.txt"
@@ -148,7 +154,11 @@ def fix_command(
                     if stderr_path.exists()
                     else ""
                 )
-                error_log = f"stdout: {stdout}\nstderr: {stderr}"
+
+                error_log = (
+                    f"cmd: {cmd} cwd: {cwd}\n\nSTDOUT:\n{stdout}\n\nSTDERR:\n{stderr}"
+                )
+
                 if not error_log.strip():
                     error(
                         "Log directory missing stdout.txt and stderr.txt. Provide a valid save_exec_output folder."
@@ -162,12 +172,16 @@ def fix_command(
             if not log_dir:
                 log_dir = dir_config.cache_dir / cmd2hash(cmd, cwd or Path.cwd())
             save_exec_output(result, log_dir)
-            error_log = (result.stdout or "") + (result.stderr or "")
+            error_log = (
+                f"cmd: {shlex.join(cmd)} cwd: {cwd or Path.cwd()}\n\n"
+                f"STDOUT:\n{result.stdout}\n\nSTDERR:\n{result.stderr}"
+            )
 
         if not error_log:
             warning("error log is empty. Maybe only non zero exit code?")
 
         # Perform analysis with current working directory
+        general_fixer = GeneralFixer()
         suggestion = general_fixer.quick_analyze(
             error_log=error_log, cwd=str(cwd or Path.cwd())
         )

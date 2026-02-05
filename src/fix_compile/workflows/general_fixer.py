@@ -7,15 +7,11 @@ from typing import Optional
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
 from pydantic import ValidationError
-from rich.console import Console
 
 from fix_compile.config import config_service
 from fix_compile.utils import ui
 
 from ..schema import FixSuggestion, FixType, GeneralAnalysisContext
-
-console = Console()
-
 
 # ============================================================================
 # File System Tools
@@ -192,7 +188,7 @@ For DOCKER fixes:
         Raises:
             AnalysisError: If analysis fails
         """
-        console.print("\n[cyan]🧠 Analyzing error with LLM...[/cyan]")
+        ui.info("🧠 Analyzing error with LLM...")
 
         # Build user prompt with context about the environment
         user_prompt = self._build_user_prompt(context)
@@ -227,25 +223,24 @@ For DOCKER fixes:
             fix = FixSuggestion(**fix_dict)
 
             # Log the fix suggestion
-            console.print(
-                f"[green]✓ Analysis complete (confidence: {fix.confidence:.0%})[/green]"
-            )
-            console.print(f"[dim]Reason: {fix.reason}[/dim]")
-            console.print(f"[dim]Fix Type: {fix.fix_type.value}[/dim]")
+            ui.success(f"Analysis complete (confidence: {fix.confidence:.0%})")
+            ui.debug(f"Reason: {fix.reason}")
+            ui.debug(f"Fix Type: {fix.fix_type.value}")
 
             # Display fix-specific information
             if fix.fix_type == FixType.COMMAND:
-                console.print(f"[dim]Command: {fix.command}[/dim]")
+                ui.debug(f"Command: {fix.command}")
                 if fix.command_explanation:
-                    console.print(f"[dim]{fix.command_explanation}[/dim]")
+                    ui.debug(f"{fix.command_explanation}")
             elif fix.fix_type == FixType.FILE:
-                console.print(f"[dim]File: {fix.file_path}[/dim]")
+                ui.debug(f"File: {fix.file_path}")
                 if fix.file_explanation:
-                    console.print(f"[dim]{fix.file_explanation}[/dim]")
+                    ui.debug(f"{fix.file_explanation}")
             elif fix.fix_type == FixType.DOCKER:
-                console.print(f"[dim]Dockerfile: {fix.dockerfile_path}[/dim]")
+                ui.debug(f"Dockerfile: {fix.dockerfile_path}")
 
-            console.print(f"[dim]{fix.changes_summary}[/dim]\n")
+            ui.debug(f"{fix.changes_summary}")
+            ui.info("")  # Empty line for spacing
 
             return fix
 
@@ -314,6 +309,7 @@ For DOCKER fixes:
         Returns:
             FixSuggestion
         """
+        cwd = Path(cwd).resolve().as_posix()
 
         context = GeneralAnalysisContext(
             error_log=error_log,

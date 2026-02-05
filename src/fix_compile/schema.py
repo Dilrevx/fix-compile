@@ -81,23 +81,28 @@ class GeneralAnalysisContext(BaseModel):
     """Input context for general analysis."""
 
     error_log: str = Field(description="Build/run error log")
-    cwd: str = Field(default=".", description="Current working directory")
+    cwd: str = Field(description="Current working directory")
     previous_attempts: int = Field(
         default=0, description="Number of previous fix attempts"
     )
 
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "error_log": "ERROR: Command 'pip install' failed with exit code 1",
+                "cwd": ".",
+                "previous_attempts": 0,
+            }
+        }
 
-class DockerAnalysisContext(BaseModel):
+
+class DockerAnalysisContext(GeneralAnalysisContext):
     """Input context for LLM analysis (The Brain)."""
 
     dockerfile_content: str = Field(description="Content of the Dockerfile")
-    error_log: str = Field(description="Build/run error log from Docker")
     operation_type: OperationType = Field(description="Build or run operation")
     dockerfile_path: str = Field(default="Dockerfile", description="Path to Dockerfile")
     build_context: str = Field(default=".", description="Docker build context path")
-    previous_attempts: int = Field(
-        default=0, description="Number of previous fix attempts"
-    )
 
     class Config:
         json_schema_extra = {
