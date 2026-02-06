@@ -11,6 +11,7 @@ from pydantic import ValidationError
 from fix_compile.config import config_service
 from fix_compile.tools import execute_command
 from fix_compile.utils import ui
+from fix_compile.utils.prompt_builder import PromptBuilder
 
 from ..schema import FixSuggestion, FixType, GeneralAnalysisContext
 
@@ -27,70 +28,27 @@ class GeneralFixer:
     It only takes text inputs and produces structured outputs.
     """
 
-    SYSTEM_PROMPT = """You are an expert problem solver for general errors in computing environments.
-
-Your task is to analyze error logs and provide precise, actionable fixes.
-The fix can be one of three types:
-1. COMMAND: Modify or run a shell command
-2. FILE: Modify a file in the current working directory
-3. DOCKER: Modify a Dockerfile (for Docker-specific errors)
-
-Guidelines:
-1. Analyze the error log carefully to identify the root cause
-2. Provide a fix that addresses the root cause, not just symptoms
-3. Choose the most appropriate fix type:
-   - Use COMMAND if the fix is to change/run a command
-   - Use FILE if the fix requires modifying application files (config, source code, requirements, etc.)
-   - Use DOCKER if the error is Docker-related and needs Dockerfile changes
-4. Be minimal - only change what's necessary
-5. Always provide a clear explanation of what went wrong and why your fix works
-6. Consider the current working directory when specifying file paths (use relative paths)
-
-You MUST respond with valid JSON matching this exact schema based on the fix type:
-
-For COMMAND fixes:
-{
-    "reason": "Detailed explanation of the root cause",
-    "fix_type": "command",
-    "command": "The complete command to execute or the modified command",
-    "command_explanation": "Explanation of what this command does and why it fixes the issue",
-    "confidence": 0.85,
-    "changes_summary": "Brief summary of the command change"
-}
-
-For FILE fixes:
-{
-    "reason": "Detailed explanation of the root cause",
-    "fix_type": "file",
-    "file_path": "Path to file (relative to cwd, e.g., 'src/config.py' or 'requirements.txt')",
-    "new_content": "Complete new content of the file",
-    "file_explanation": "Explanation of what was changed in the file and why",
-    "confidence": 0.85,
-    "changes_summary": "Brief summary of file changes"
-}
-
-For DOCKER fixes:
-{
-    "reason": "Detailed explanation of the Docker error",
-    "fix_type": "docker",
-    "dockerfile_path": "Path to Dockerfile (e.g., 'Dockerfile')",
-    "dockerfile_content": "Complete new Dockerfile content",
-    "confidence": 0.85,
-    "changes_summary": "Brief summary of Dockerfile changes"
-}"""
-
-    def __init__(self, model: Optional[str] = None, api_key: Optional[str] = None):
+    def __init__(
+        self,
+        model: Optional[str] = None,
+        api_key: Optional[str] = None,
+        custom_prompt: Optional[str] = None,
+    ):
         """
         Initialize the analyzer.
 
         Args:
             model: Model name to use (defaults to config)
             api_key: API key (defaults to config)
+            custom_prompt: User custom prompt to append to system prompt (defaults to config)
         """
 
         self.config = config_service.config
         self.model = model or self.config.FIXER_MODEL
         api_key_value = api_key or self.config.OPENAI_API_KEY.get_secret_value()
+        self.custom_prompt = (
+            custom_prompt if custom_prompt is not None else self.config.CUSTOM_PROMPT
+        )
 
         self.client = ChatOpenAI(
             model=self.model,
@@ -113,13 +71,16 @@ For DOCKER fixes:
         """
         ui.info("🧠 Analyzing error with LLM...")
 
+        # Build system prompt with custom requirements
+        system_prompt = PromptBuilder.build_system_prompt(self.custom_prompt)
+
         # Build user prompt with context about the environment
         user_prompt = self._build_user_prompt(context)
 
         try:
             # Call LLM with structured output
             messages = [
-                SystemMessage(content=self.SYSTEM_PROMPT),
+                SystemMessage(content=system_prompt),
                 HumanMessage(content=user_prompt),
             ]
 

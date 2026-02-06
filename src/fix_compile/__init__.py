@@ -14,6 +14,7 @@ from .schema import (
     FixSuggestion,
     GeneralAnalysisContext,
 )
+from .utils.prompt_builder import PromptBuilder
 from .workflows.docker_fixer import DockerFixer
 from .workflows.general_fixer import GeneralFixer
 
@@ -27,6 +28,7 @@ __all__ = [
     "DockerBuildConfig",
     "DockerRunConfig",
     "DockerFixer",
+    "PromptBuilder",
     "setup_phoenix_tracing",
     "get_phoenix_status",
     "set_config_value",

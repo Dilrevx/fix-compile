@@ -1,12 +1,16 @@
 """Docker fixer with auto-fix pipeline."""
 
+import json
 import os
+import subprocess
+import sys
 from pathlib import Path
 from typing import Optional
 
 from fix_compile.config import Configs
 from fix_compile.executor import Executor
 from fix_compile.schema import (
+    CommandResult,
     DockerAnalysisContext,
     GeneralAnalysisContext,
     OperationType,
@@ -28,7 +32,94 @@ class DockerFixer:
         """
         self.config = config
         self.executor = Executor()
-        self.fixer = GeneralFixer()
+        # Pass custom_prompt from config to GeneralFixer
+        self.fixer = GeneralFixer(custom_prompt=config.CUSTOM_PROMPT)
+
+    def _execute_with_logging(
+        self,
+        cmd: list[str],
+        cwd: str,
+        stdout_file: Path,
+        stderr_file: Path,
+        env: dict = None,
+    ) -> CommandResult:
+        """
+        Execute command with real-time output streaming and file logging.
+
+        Args:
+            cmd: Command to execute
+            cwd: Working directory
+            stdout_file: File to write stdout
+            stderr_file: File to write stderr
+            env: Environment variables
+
+        Returns:
+            CommandResult with execution details
+        """
+        import shlex
+
+        cmd_str = shlex.join(cmd)
+        ui.info(f"🐳 Executing: {cmd_str}")
+
+        # Open files in write mode
+        with (
+            open(stdout_file, "w", encoding="utf-8") as f_out,
+            open(stderr_file, "w", encoding="utf-8") as f_err,
+        ):
+            # Start process
+            process = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                cwd=cwd,
+                env=env,
+                text=True,
+                bufsize=1,
+                universal_newlines=True,
+            )
+
+            stdout_lines = []
+            stderr_lines = []
+
+            # Read and write stdout in real-time
+            while True:
+                stdout_line = process.stdout.readline()
+                if stdout_line:
+                    stdout_lines.append(stdout_line)
+                    # Write to console
+                    ui.info(stdout_line.rstrip())
+                    sys.stdout.flush()
+                    # Write to file immediately
+                    f_out.write(stdout_line)
+                    f_out.flush()
+
+                # Check if process is done
+                if process.poll() is not None:
+                    break
+
+            # Capture remaining output
+            remaining_stdout = process.stdout.read()
+            if remaining_stdout:
+                stdout_lines.append(remaining_stdout)
+                ui.info(remaining_stdout.rstrip())
+                f_out.write(remaining_stdout)
+
+            # Read all stderr
+            stderr_output = process.stderr.read()
+            if stderr_output:
+                stderr_lines.append(stderr_output)
+                f_err.write(stderr_output)
+
+            exit_code = process.wait()
+
+        return CommandResult(
+            exit_code=exit_code,
+            stdout="".join(stdout_lines),
+            stderr="".join(stderr_lines),
+            success=(exit_code == 0),
+            command=cmd_str,
+            cwd=cwd,
+        )
 
     def run_pipeline(
         self,
@@ -55,33 +146,46 @@ class DockerFixer:
         # 2. Cache calculation
         task_hash = cmd2hash(cmd, cwd)
         log_dir = self.config.dir_configs.cache_dir / task_hash
-        log_file = log_dir / "docker.log"
+
+        # Define log file paths following general_fixer structure
+        stdout_file = log_dir / "stdout.txt"
+        stderr_file = log_dir / "stderr.txt"
+        metadata_file = log_dir / "metadata.json"
 
         # 3. Execution strategy
         # Check if we can skip execution
-        if not force_rerun and log_file.exists():
-            ui.info(f"📦 Using cached log from: {log_file}")
-            error_log = log_file.read_text(encoding="utf-8")
+        if not force_rerun and stdout_file.exists() and stderr_file.exists():
+            ui.info(f"📦 Using cached log from: {log_dir}")
+            stdout = stdout_file.read_text(encoding="utf-8")
+            stderr = stderr_file.read_text(encoding="utf-8")
+            error_log = stdout + stderr
             success = False  # Assume cached logs are from failures
         else:
-            # Execute command with streaming output
-            ui.info(f"🐳 Executing: {' '.join(cmd)}")
-
             # Ensure log directory exists
             log_dir.mkdir(parents=True, exist_ok=True)
 
-            # Execute with custom environment
-            result = self.executor.execute(
-                cmd,
+            # Execute with real-time file logging
+            result = self._execute_with_logging(
+                cmd=cmd,
                 cwd=str(cwd),
-                stream=True,
+                stdout_file=stdout_file,
+                stderr_file=stderr_file,
+                env=env,
             )
 
-            # Save logs
-            error_log = (result.stdout or "") + (result.stderr or "")
-            log_file.write_text(error_log, encoding="utf-8")
-            ui.debug(f"Saved log to: {log_file}")
+            # Save metadata.json (excluding stdout/stderr)
+            metadata = {
+                "exit_code": result.exit_code,
+                "success": result.success,
+                "command": result.command,
+                "cwd": result.cwd,
+            }
+            metadata_file.write_text(
+                json.dumps(metadata, indent=2, ensure_ascii=False), encoding="utf-8"
+            )
+            ui.debug(f"Saved logs to: {log_dir}")
 
+            error_log = (result.stdout or "") + (result.stderr or "")
             success = result.success
 
         # 4. Result handling
@@ -90,7 +194,7 @@ class DockerFixer:
             return
 
         ui.warning("❌ Docker command failed (exit code: non-zero)")
-        ui.info(f"Log saved to: {log_file}")
+        ui.info(f"Log saved to: {log_dir}")
 
         # 5. Smart fix (Fixer)
         if no_fix:

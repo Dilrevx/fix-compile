@@ -163,6 +163,12 @@ class Configs(BaseSettings):
         default=DEFAULT_TIMEOUT, gt=0, description="Timeout in seconds"
     )
 
+    # 自定义提示词配置
+    CUSTOM_PROMPT: str = Field(
+        default="",
+        description="User custom prompt to append to system prompt (e.g., proxy settings, environment requirements)",
+    )
+
     dir_configs: DirConfigs = Field(default_factory=DirConfigs)
 
     # 关闭 Pydantic Settings 的 dotenv 功能，已由 dotenv 加载到 os.environ
