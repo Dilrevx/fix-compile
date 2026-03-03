@@ -19,6 +19,16 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from fix_compile.constants import (
     CACHE_FILENAME,
     CONFIG_FILENAME,
+    DEFAULT_JAVA_CODEQL_LANGUAGE,
+    DEFAULT_JAVA_CODEQL_QUERY_SUITE,
+    DEFAULT_JAVA_DOCKER_IMAGE_PREFIX,
+    DEFAULT_JAVA_DOCKER_WORKDIR,
+    DEFAULT_JAVA_M2_LOCAL_REPO,
+    DEFAULT_JAVA_M2_MIRROR_ID,
+    DEFAULT_JAVA_M2_MIRROR_OF,
+    DEFAULT_JAVA_M2_MIRROR_URL,
+    DEFAULT_JAVA_MAX_FIX_ATTEMPTS,
+    DEFAULT_JAVA_USE_CN_MIRROR,
     DEFAULT_LOG_LEVEL_INFO,
     DEFAULT_MAX_TOKENS,
     DEFAULT_MODEL_GPT_5_MINI,
@@ -132,6 +142,10 @@ class DirConfigs(BaseModel):
     log_file: Path = log_dir / LOG_FILENAME
     config_file: Path = config_dir / CONFIG_FILENAME
 
+    java_cache_dir: Path = cache_dir / "java"
+    java_state_dir: Path = state_dir / "java"
+    java_data_dir: Path = data_dir / "java"
+
 
 class Configs(BaseSettings):
     """Configuration for DockerfileFixer using Pydantic Settings."""
@@ -167,6 +181,48 @@ class Configs(BaseSettings):
     CUSTOM_PROMPT: str = Field(
         default="",
         description="User custom prompt to append to system prompt (e.g., proxy settings, environment requirements)",
+    )
+
+    JAVA_MAX_FIX_ATTEMPTS: int = Field(
+        default=DEFAULT_JAVA_MAX_FIX_ATTEMPTS,
+        gt=0,
+        description="Max LLM auto-fix attempts for Java workflow",
+    )
+    JAVA_DOCKER_IMAGE_PREFIX: str = Field(
+        default=DEFAULT_JAVA_DOCKER_IMAGE_PREFIX,
+        description="Docker image prefix for Java isolated environment",
+    )
+    JAVA_DOCKER_WORKDIR: str = Field(
+        default=DEFAULT_JAVA_DOCKER_WORKDIR,
+        description="Project mount directory inside Java docker container",
+    )
+    JAVA_CODEQL_LANGUAGE: str = Field(
+        default=DEFAULT_JAVA_CODEQL_LANGUAGE,
+        description="CodeQL language for Java scan",
+    )
+    JAVA_CODEQL_QUERY_SUITE: str = Field(
+        default=DEFAULT_JAVA_CODEQL_QUERY_SUITE,
+        description="CodeQL query suite for Java scan",
+    )
+    JAVA_M2_MIRROR_ID: str = Field(
+        default=DEFAULT_JAVA_M2_MIRROR_ID,
+        description="Maven mirror id used when generating settings.xml",
+    )
+    JAVA_M2_MIRROR_URL: str = Field(
+        default=DEFAULT_JAVA_M2_MIRROR_URL,
+        description="Maven mirror URL used in generated settings.xml",
+    )
+    JAVA_M2_MIRROR_OF: str = Field(
+        default=DEFAULT_JAVA_M2_MIRROR_OF,
+        description="Maven mirrorOf pattern used in generated settings.xml",
+    )
+    JAVA_M2_LOCAL_REPO: str = Field(
+        default=DEFAULT_JAVA_M2_LOCAL_REPO,
+        description="Maven local repository path inside container",
+    )
+    JAVA_USE_CN_MIRROR: bool = Field(
+        default=DEFAULT_JAVA_USE_CN_MIRROR,
+        description="Switch apt/pip sources to Tsinghua mirror when building the Java Docker image",
     )
 
     dir_configs: DirConfigs = Field(default_factory=DirConfigs)

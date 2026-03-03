@@ -28,6 +28,16 @@ DEFAULT_OPENAI_API_BASE: Final[str] = "https://api.openai.com/v1"
 DEFAULT_MODEL_GPT_5_MINI: Final[str] = "gpt-5-mini"
 DEFAULT_LOG_LEVEL_INFO: Final[str] = "INFO"
 DEFAULT_MAX_TOKENS: Final[int] = 32768
+DEFAULT_JAVA_MAX_FIX_ATTEMPTS: Final[int] = 3
+DEFAULT_JAVA_DOCKER_IMAGE_PREFIX: Final[str] = "fix-compile-java"
+DEFAULT_JAVA_DOCKER_WORKDIR: Final[str] = "/workspace/project"
+DEFAULT_JAVA_CODEQL_LANGUAGE: Final[str] = "java"
+DEFAULT_JAVA_CODEQL_QUERY_SUITE: Final[str] = "codeql/java-queries"
+DEFAULT_JAVA_M2_MIRROR_ID: Final[str] = "aliyun-public"
+DEFAULT_JAVA_M2_MIRROR_URL: Final[str] = "https://maven.aliyun.com/repository/public"
+DEFAULT_JAVA_M2_MIRROR_OF: Final[str] = "*"
+DEFAULT_JAVA_M2_LOCAL_REPO: Final[str] = "/workspace/.m2/repository"
+DEFAULT_JAVA_USE_CN_MIRROR: Final[bool] = False
 
 # ---------------------------------------------------------
 # 3. 文件系统与路径 (Files & Paths)
@@ -45,6 +55,7 @@ USER_CONFIG_DIR: Final[Path] = Path(PLATFORM_DIRS.user_config_dir)
 USER_CACHE_DIR: Final[Path] = Path(PLATFORM_DIRS.user_cache_dir)
 USER_LOG_DIR: Final[Path] = Path(PLATFORM_DIRS.user_log_dir)
 USER_STATE_DIR: Final[Path] = Path(PLATFORM_DIRS.user_state_dir)
+JAVA_TEMPLATE_FILE: Final[Path] = PKG_ROOT / "assets" / "templates" / "Dockerfile-Java"
 
 
 # 固定的文件名

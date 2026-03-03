@@ -1,280 +1,300 @@
-# 🔧 fix-compile
+# fix-compile Architecture
 
-自动修复 Docker 构建和运行时错误的 CLI 工具，基于 LLM 智能分析。
+**Version**: 0.2.0
+**Updated**: 2026-03-03
 
-## 🏗️ 架构设计
+---
 
-本项目采用 **"Executor vs Analyzer"（Hand vs Brain）** 的关注点分离架构：
+## Overview
 
-```
-┌─────────────────────────────────────────────────────────┐
-│                        CLI Layer                        │
-│                   (typer commands)                      │
-└────────────────┬───────────────────────┬────────────────┘
-                 │                       │
-        ┌────────▼────────┐    ┌────────▼────────┐
-        │   Executor      │    │    Analyzer     │
-        │   (The Hand)    │    │   (The Brain)   │
-        │                 │    │                 │
-        │ • subprocess    │    │ • LLM calls     │
-        │ • file I/O      │    │ • JSON parsing  │
-        │ • docker cmds   │    │ • analysis      │
-        └─────────────────┘    └─────────────────┘
-```
+`fix-compile` is a CLI tool that runs builds in isolated Docker environments and uses
+an LLM (OpenAI / compatible) to automatically analyze compile errors and suggest fixes,
+looping until the build succeeds or the attempt limit is reached.
 
-### 核心模块
+---
 
-- **`schema.py`**: Pydantic 数据模型定义
-- **`executor.py`**: The Hand - 执行命令、读写文件，不涉及 LLM
-- **`brain.py`**: The Brain - 纯 LLM 交互逻辑，不涉及 subprocess
-- **`main.py`**: CLI 入口，协调 Executor 和 Analyzer
-- **`config.py`**: Pydantic Settings 配置管理
-
-## 🚀 安装
-
-```bash
-# 使用 uv (推荐)
-uv pip install -e .
-
-# 或使用 pip
-pip install -e .
-```
-
-## ⚙️ 配置
-
-创建 `.env` 文件：
-
-```bash
-cp .env.example .env
-```
-
-编辑 `.env`:
-
-```env
-OPENAI_API_BASE=https://api.openai.com/v1
-OPENAI_API_KEY=sk-your-key-here
-FIXER_MODEL=gpt-4o-mini
-MAX_TOKENS=32768
-TIMEOUT=300
-```
-
-## 📖 使用方法
-
-### 1️⃣ 分析模式（只读）
-
-仅分析错误并给出建议，**不执行任何操作**：
-
-```bash
-# 从日志文件分析
-fix-compile analyze --log error.txt --file Dockerfile
-
-# 从 stdin 管道分析
-docker build . 2>&1 | fix-compile analyze --file Dockerfile
-
-# 保存建议到 JSON
-fix-compile analyze --log error.txt --output suggestion.json
-```
-
-### 2️⃣ Docker 自动修复模式
-
-#### 仅构建（自动修复构建错误）
-
-```bash
-fix-compile docker . --tag myapp:latest --build-only
-```
-
-#### 构建 + 运行（自动修复构建和运行错误）
-
-```bash
-fix-compile docker . --tag myapp:latest --run-args "-p 8080:80 -e ENV=prod"
-```
-
-#### 仅运行（假设镜像已构建）
-
-```bash
-fix-compile docker --run-only --tag myapp:latest
-```
-
-#### 自动应用修复（不询问）
-
-```bash
-fix-compile docker . --tag myapp:latest --yes
-```
-
-## 🔄 工作流程
-
-### Build Loop
-
-```
-1. 执行 docker build
-2. 如果失败：
-   a. 捕获 stderr
-   b. 调用 Analyzer 分析错误
-   c. 显示建议（可选：请求确认）
-   d. 应用修复
-   e. 回到步骤 1
-3. 如果成功且设置了 --run：进入 Run Loop
-```
-
-### Run Loop
-
-```
-1. 执行 docker run
-2. 如果失败：
-   a. 捕获运行时错误
-   b. 调用 Analyzer 分析
-   c. 显示建议（可选：请求确认）
-   d. 应用修复到 Dockerfile
-   e. 重新构建镜像
-   f. 回到步骤 1
-3. 成功：退出
-```
-
-## 🎯 CLI 设计理念
-
-使用顶层命令区分功能，便于未来扩展：
-
-```
-fix-compile
-├── analyze          # 分析模式（Brain only）
-└── docker           # Docker 自动修复
-    ├── --build-only # 仅构建
-    ├── --run-only   # 仅运行
-    └── (default)    # 构建 + 运行
-```
-
-未来可扩展：
-
-```
-fix-compile
-├── analyze
-├── docker
-├── kubernetes      # K8s YAML 修复
-└── compose         # docker-compose 修复
-```
-
-## 📦 项目结构
+## 1. Project Layout
 
 ```
 fix-compile/
 ├── src/
-│   └── fix_compile/
-│       ├── __init__.py      # 导出主要类
-│       ├── __main__.py      # 包入口
-│       ├── schema.py        # 数据模型（Pydantic）
-│       ├── config.py        # 配置（Pydantic Settings）
-│       ├── executor.py      # The Hand（subprocess）
-│       ├── brain.py         # The Brain（LLM）
-│       └── main.py          # CLI（Typer）
-├── pyproject.toml
-├── .env.example
-└── README.md
+│   ├── cli/                        # Typer CLI entry point
+│   │   ├── main.py                 # app, all top-level commands
+│   │   └── commands/               # sub-apps (config, docker)
+│   │       ├── config.py           # config get/set/list/del
+│   │       └── docker.py           # docker build / run fix loop
+│   └── fix_compile/                # Core library (importable)
+│       ├── __init__.py             # Public API, version
+│       ├── config.py               # Pydantic Settings (Configs, DirConfigs)
+│       ├── constants.py            # Literal constants, no imports
+│       ├── executor.py             # Subprocess wrapper (Executor)
+│       ├── schema.py               # All Pydantic data models
+│       ├── assets/
+│       │   └── templates/
+│       │       └── Dockerfile-Java # Base image for Java workflow
+│       ├── utils/
+│       │   ├── io.py               # cmd2hash, save_exec_output
+│       │   ├── prompt_builder.py   # System-prompt construction
+│       │   └── ui.py               # Rich console helpers
+│       ├── tools/
+│       │   └── filesystem.py       # read_file / write_file LLM tools
+│       └── workflows/
+│           ├── general_fixer.py    # LLM brain (GeneralFixer)
+│           ├── docker_fixer.py     # Docker build/run fix loop
+│           └── java_fixer.py       # Java compile workflow (JavaCompileAgent)
+├── tests/
+│   ├── test_java_fixer.py
+│   ├── test_analyzer.py
+│   └── test_architecture.py
+└── pyproject.toml
 ```
 
-## 🧪 开发
+---
+
+## 2. Component Roles
+
+| Component | Role |
+|---|---|
+| `Executor` | Thin `subprocess.Popen` wrapper; streams output; saves stdout/stderr |
+| `GeneralFixer` | LangChain + OpenAI; takes error log → returns `FixSuggestion` |
+| `DockerFixer` | Orchestrates docker-build/run retry loop using Executor + GeneralFixer |
+| `JavaCompileAgent` | Orchestrates Java Docker image build → compile → LLM fix loop → optional CodeQL |
+| `Configs` | Pydantic `BaseSettings`; reads env vars, config file, CLI defaults |
+| `DirConfigs` | `platformdirs`-based paths (cache / state / data) per OS |
+
+---
+
+## 3. CLI Commands
+
+```
+fix-compile
+├── config                  # Manage persistent configuration
+│   ├── set <key> <value>
+│   ├── get <key>
+│   ├── list
+│   └── del <key>
+│
+├── docker                  # Docker build/run fix workflow
+│   ├── build               # Fix docker build errors with LLM loop
+│   └── run                 # Fix docker run errors with LLM loop
+│
+├── java                    # Java compile workflow (isolated Docker)
+│   --dir <path>            # Java project root (required)
+│   --docker                # Enable Docker isolation (required for now)
+│   --compile-cmd <cmd>     # Override auto-detected build command
+│   --with-codeql           # Run CodeQL after successful compile
+│   --m2-settings <file>    # Mount a custom Maven settings.xml
+│   --docker-arg <arg>      # Extra docker run args (repeatable)
+│   --max-attempts <n>      # Max LLM auto-fix attempts (default: 3)
+│   --no-fix                # Compile once, no LLM fix loop
+│   --force                 # Force rebuild Docker image
+│   --dev                   # Load .env for development
+│
+├── fix                     # One-shot LLM analysis of a log
+│   --log-dir / --text / --cmd
+│
+├── exec                    # Execute arbitrary command and cache log
+│   <cmd...>
+│
+└── version
+```
+
+---
+
+## 4. Data Flow
+
+### Java Compile Workflow (`java_fixer.py`)
+
+```
+fix-compile java --dir <project> --docker [--with-codeql]
+       │
+       ▼
+JavaCompileAgent.run_pipeline()
+       │
+       ├─ 1. Validate project_dir exists
+       ├─ 2. Check docker is available
+       ├─ 3. Compute run_hash (project path + flags); mkdir state_dir/<hash>/
+       ├─ 4. Copy Dockerfile-Java template → state_dir/<hash>/Dockerfile
+       ├─ 5. Auto-detect build tool (pom.xml→Maven, build.gradle→Gradle)
+       ├─ 6. Resolve .m2 settings (explicit file OR auto-generate from mirror config)
+       │
+       └─ Loop (max_attempts):
+              │
+              ├─ docker build → fix-compile-java:<hash>   (only when Dockerfile changed)
+              ├─ docker run --rm \
+              │        --add-host=host.docker.internal:host-gateway \
+              │        -v project_dir:/workspace/project \
+              │        -v state_dir:/workspace/runstate \
+              │        -v host_m2:/workspace/.m2/repository \
+              │        [-v settings.xml:/root/.m2/settings.xml:ro]
+              │        <image> bash -lc "<compile_cmd>"
+              │
+              ├─ [success] → break
+              ├─ [no_fix]  → break
+              └─ GeneralFixer.quick_analyze(error_log)
+                     │
+                     ├─ FixType.COMMAND  → update compile_cmd
+                     ├─ FixType.FILE     → write file to project_dir (+ .bak)
+                     └─ FixType.DOCKER   → write Dockerfile, set need_rebuild=True
+       │
+       └─ [with_codeql & success]
+              docker run <image> bash -lc "codeql database create ... && codeql database analyze ..."
+              → SARIF output saved to state_dir/<hash>/attempt-N/codeql-result.sarif
+```
+
+### Docker Build/Run Fix Loop (`docker_fixer.py`)
+
+```
+fix-compile docker build <dockerfile> <context> [--tag <tag>]
+       │
+       ▼
+DockerFixer.fix_build_loop()
+       │
+       └─ Loop (max_retries):
+              ├─ docker build → capture stderr on failure
+              ├─ [success] → done
+              └─ GeneralFixer.analyze() → apply fix
+                     ├─ FixType.FILE    → patch Dockerfile
+                     └─ FixType.COMMAND → update build cmd
+```
+
+### One-shot Analysis (`fix` command)
+
+```
+fix-compile fix [--text | --log-dir | --cmd]
+       │
+       └─ GeneralFixer.analyze(error_log) → print FixSuggestion
+```
+
+---
+
+## 5. Configuration
+
+Priority (highest → lowest):
+
+1. CLI arguments
+2. Config file: `~/.config/fix-compile/<version>/config.yaml`
+3. Environment variables
+4. `.env` file (dev mode only, `--dev` flag)
+5. Pydantic field defaults
+
+Key config keys (set with `fix-compile config set <KEY> <VALUE>`):
+
+| Key | Default | Purpose |
+|---|---|---|
+| `FIXER_MODEL` | `gpt-4o` | LLM model name |
+| `OPENAI_API_KEY` | — | OpenAI / compatible API key |
+| `OPENAI_BASE_URL` | (openai default) | Custom base URL for compatible APIs |
+| `CUSTOM_PROMPT` | (built-in) | Override system prompt |
+| `JAVA_MAX_FIX_ATTEMPTS` | `3` | Max LLM fix loops for java workflow |
+| `JAVA_DOCKER_IMAGE_PREFIX` | `fix-compile-java` | Docker image name prefix |
+| `JAVA_M2_MIRROR_URL` | `https://maven.aliyun.com/...` | Maven mirror (auto-generates settings.xml) |
+| `JAVA_M2_MIRROR_ID` | `aliyun-public` | Mirror ID in generated settings.xml |
+| `JAVA_M2_MIRROR_OF` | `*` | Mirror pattern |
+
+---
+
+## 6. Persistent Storage (`platformdirs`)
+
+All paths are OS-appropriate and version-scoped under `<app>/0.2.0/`.
+
+| Purpose | Linux path | Config key (DirConfigs) |
+|---|---|---|
+| Config file | `~/.config/fix-compile/0.2.0/config.yaml` | — |
+| Logs | `~/.local/state/fix-compile/0.2.0/log/` | `log_dir` |
+| Exec cache | `~/.cache/fix-compile/0.2.0/` | `cache_dir` |
+| Java state | `~/.local/state/fix-compile/0.2.0/java/` | `java_state_dir` |
+| Java m2 repo | `~/.local/share/fix-compile/0.2.0/java/m2/repository/` | `java_data_dir` |
+| Java m2 settings | `~/.local/share/fix-compile/0.2.0/java/m2/settings.xml` | (generated) |
+
+---
+
+## 7. Schema Models (`schema.py`)
+
+```
+FixType          (COMMAND | FILE | DOCKER)
+OperationType    (BUILD | RUN | COMPILE | ...)
+
+FixSuggestion
+  ├─ fix_type: FixType
+  ├─ command: str | None
+  ├─ file_path: str | None
+  ├─ new_content: str | None
+  └─ dockerfile_content: str | None
+
+GeneralAnalysisContext
+  ├─ error_log: str
+  ├─ cwd: str
+  └─ previous_attempts: int
+
+JavaBuildTool    (MAVEN | GRADLE | UNKNOWN)
+
+JavaFixConfig
+  ├─ project_dir: str
+  ├─ use_docker: bool
+  ├─ with_codeql: bool
+  ├─ no_fix: bool
+  ├─ force_rebuild: bool
+  ├─ max_attempts: int
+  ├─ compile_command: str | None
+  ├─ passthrough_args: list[str]
+  ├─ docker_run_args: list[str]
+  └─ m2_settings_file: str | None
+
+JavaFixResult
+  ├─ success: bool
+  ├─ attempts: int
+  ├─ build_tool: JavaBuildTool
+  ├─ build_command: str
+  ├─ codeql_command: str | None
+  ├─ image_tag: str
+  └─ logs_dir: str
+```
+
+---
+
+## 8. Security Notes
+
+- API keys stored as Pydantic `SecretStr` — never printed in logs or REPL
+- Subprocess commands built with `shlex.join()` — no shell injection
+- Docker proxy URLs: `127.0.0.1` / `localhost` are automatically translated to
+  `host.docker.internal` (with `--add-host=host.docker.internal:host-gateway`)
+  so host-side proxies are reachable from inside containers on Linux
+
+---
+
+## 9. Testing
 
 ```bash
-# 安装开发依赖
-uv pip install -e ".[dev]"
+uv run pytest tests/ -q                      # all tests
+uv run pytest tests/test_java_fixer.py -q   # java workflow unit tests only
+```
 
-# 运行测试
-pytest
+Tests use `tmp_path` fixtures and mock `Configs` — no real Docker or API calls needed.
 
-# 代码格式化
+---
+
+## 10. Development Setup
+
+```bash
+uv sync                           # install dependencies
+uv pip install -e ".[dev]"        # editable install with dev extras
+
+# local CLI
+uv run . java --dir <path> --docker --no-fix --dev
+
+# format / lint
 black src/
 ruff check src/
-
-# 类型检查
 mypy src/
 ```
 
-## 🔧 高级用法
+---
 
-### 自定义重试次数
+## 11. References
 
-```bash
-fix-compile docker . --tag myapp --retry 5
-```
-
-### 禁用缓存构建
-
-```bash
-fix-compile docker . --tag myapp --no-cache
-```
-
-### 详细输出
-
-```bash
-fix-compile docker . --tag myapp --verbose
-```
-
-### 组合使用
-
-```bash
-fix-compile docker ./backend \
-  --file backend/Dockerfile \
-  --tag mybackend:v1.0 \
-  --run-args "-p 3000:3000 -e DB_HOST=localhost" \
-  --retry 5 \
-  --yes \
-  --verbose
-```
-
-## 📝 示例场景
-
-### 场景 1: 修复构建错误
-
-```bash
-$ fix-compile docker . --tag myapp:latest --build-only
-
-Phase 1: Docker Build
-Attempt 1/3
-
-[docker build output...]
-❌ Build failed (exit code 1)
-
-🧠 Analyzing error with LLM...
-✓ Analysis complete (confidence: 95%)
-
-💡 Fix Suggestion
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Reason:
-The base image ubuntu:20.04 repositories are deprecated...
-
-Changes:
-Updated base image from ubuntu:20.04 to ubuntu:22.04
-
-Confidence: 95%
-
-Apply this fix? [Y/n]: y
-
-✓ Fix applied successfully
-
-Attempt 2/3
-[docker build output...]
-✅ Build succeeded!
-```
-
-### 场景 2: 管道分析
-
-```bash
-$ docker build . 2>&1 | fix-compile analyze -f Dockerfile
-
-🧠 Analyzing error with LLM...
-
-🔍 Fix Suggestion
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Reason: Missing build dependency...
-Changes: Added build-essential to apt-get install
-Confidence: 88%
-
-[显示新的 Dockerfile]
-```
-
-## 🤝 贡献
-
-欢迎提交 Issue 和 Pull Request！
-
-## 📄 License
-
-MIT
+- [Typer Documentation](https://typer.tiangolo.com/)
+- [Pydantic Documentation](https://docs.pydantic.dev/)
+- [LangChain Documentation](https://python.langchain.com/)
+- [Rich Documentation](https://rich.readthedocs.io/)
+- [platformdirs](https://platformdirs.readthedocs.io/)

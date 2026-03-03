@@ -13,10 +13,13 @@ from .schema import (
     DockerRunConfig,
     FixSuggestion,
     GeneralAnalysisContext,
+    JavaFixConfig,
+    JavaFixResult,
 )
 from .utils.prompt_builder import PromptBuilder
 from .workflows.docker_fixer import DockerFixer
 from .workflows.general_fixer import GeneralFixer
+from .workflows.java_fixer import JavaCompileAgent
 
 __all__ = [
     "GeneralFixer",
@@ -29,6 +32,9 @@ __all__ = [
     "DockerRunConfig",
     "DockerFixer",
     "PromptBuilder",
+    "JavaCompileAgent",
+    "JavaFixConfig",
+    "JavaFixResult",
     "setup_phoenix_tracing",
     "get_phoenix_status",
     "set_config_value",

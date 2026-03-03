@@ -1,0 +1,113 @@
+# ==========================================
+# fix-compile: Java + CodeQL runtime
+# ==========================================
+
+ARG UBUNTU_VERSION=22.04
+FROM ubuntu:${UBUNTU_VERSION}
+
+ENV DEBIAN_FRONTEND=noninteractive
+ARG WORKSPACE_DIR=/workspace
+WORKDIR ${WORKSPACE_DIR}
+
+ARG HTTP_PROXY
+ARG HTTPS_PROXY
+ARG NO_PROXY
+
+ARG TARGET_JAVA_VERSION=17
+ARG MAVEN_VERSION=3.9.8
+ARG GRADLE_VERSION=8.9
+ARG CODEQL_VERSION=v2.23.2
+
+ENV HTTP_PROXY=${HTTP_PROXY}
+ENV HTTPS_PROXY=${HTTPS_PROXY}
+ENV NO_PROXY=${NO_PROXY}
+ENV MAVEN_CONFIG=/workspace/.m2
+
+# --- Optional: switch Ubuntu apt sources to Tsinghua mirror (China) ---
+# Set --build-arg USE_CN_MIRROR=true to enable.
+ARG USE_CN_MIRROR=false
+RUN if [ "${USE_CN_MIRROR}" = "true" ]; then \
+    sed -i \
+    -e 's|http://archive.ubuntu.com/ubuntu/|https://mirrors.tuna.tsinghua.edu.cn/ubuntu/|g' \
+    -e 's|http://security.ubuntu.com/ubuntu/|https://mirrors.tuna.tsinghua.edu.cn/ubuntu/|g' \
+    /etc/apt/sources.list; \
+    fi
+
+# --- Proxy: Gradle requires systemProp.* in gradle.properties (not env vars) ---
+# Generated at build time from the HTTP_PROXY build arg.
+# Gradle proxy: gradle.properties is the only reliable way to configure proxy
+# for Gradle — systemProp.* keys are not read from environment variables.
+# We generate the file at build time from the HTTP_PROXY build arg.
+RUN if [ -n "${HTTP_PROXY}" ]; then \
+    _proxy="${HTTP_PROXY}" && \
+    _host=$(echo "$_proxy" | sed -E 's#https?://([^:/]+).*#\1#') && \
+    _port=$(echo "$_proxy" | sed -E 's#.*:([0-9]+)(/.*)?$#\1#') && \
+    mkdir -p /root/.gradle && \
+    printf 'systemProp.http.proxyHost=%s\nsystemProp.http.proxyPort=%s\nsystemProp.https.proxyHost=%s\nsystemProp.https.proxyPort=%s\nsystemProp.http.nonProxyHosts=localhost|127.0.0.1|::1\n' \
+    "$_host" "$_port" "$_host" "$_port" \
+    > /root/.gradle/gradle.properties; \
+    fi
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    bash \
+    ca-certificates \
+    curl \
+    git \
+    unzip \
+    wget \
+    openjdk-${TARGET_JAVA_VERSION}-jdk \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV JAVA_HOME=/usr/lib/jvm/java-${TARGET_JAVA_VERSION}-openjdk-amd64
+ENV PATH=$JAVA_HOME/bin:$PATH
+
+ENV MAVEN_HOME=/opt/maven/apache-maven-${MAVEN_VERSION}
+RUN mkdir -p /opt/maven && \
+    wget -q https://archive.apache.org/dist/maven/maven-3/${MAVEN_VERSION}/binaries/apache-maven-${MAVEN_VERSION}-bin.tar.gz -P /tmp && \
+    tar -xzf /tmp/apache-maven-${MAVEN_VERSION}-bin.tar.gz -C /opt/maven && \
+    rm -f /tmp/apache-maven-${MAVEN_VERSION}-bin.tar.gz
+ENV PATH=${MAVEN_HOME}/bin:$PATH
+
+ENV GRADLE_HOME=/opt/gradle/gradle-${GRADLE_VERSION}
+RUN mkdir -p /opt/gradle && \
+    wget -q https://services.gradle.org/distributions/gradle-${GRADLE_VERSION}-bin.zip -O /tmp/gradle.zip && \
+    unzip -q /tmp/gradle.zip -d /opt/gradle && \
+    rm -f /tmp/gradle.zip
+ENV PATH=${GRADLE_HOME}/bin:$PATH
+
+RUN curl -L -o /tmp/codeql.zip https://github.com/github/codeql-cli-binaries/releases/download/${CODEQL_VERSION}/codeql-linux64.zip && \
+    unzip -qo /tmp/codeql.zip -d /opt/ && \
+    rm -f /tmp/codeql.zip
+ENV PATH="/opt/codeql:${PATH}"
+
+RUN mkdir -p /workspace/project /workspace/runstate /workspace/.m2
+
+RUN cat <<'EOF' >/usr/local/bin/fix-java-entrypoint
+#!/usr/bin/env bash
+set -euo pipefail
+
+cd /workspace/project
+
+if [[ $# -eq 0 ]]; then
+  if [[ -x ./mvnw ]]; then
+    exec ./mvnw -B -DskipTests compile
+  elif [[ -f pom.xml ]]; then
+    exec mvn -B -DskipTests compile
+  elif [[ -x ./gradlew ]]; then
+    exec ./gradlew classes --no-daemon
+  elif [[ -f build.gradle || -f settings.gradle ]]; then
+    exec gradle classes --no-daemon
+  else
+    echo "No Java build tool detected (pom.xml/build.gradle)" >&2
+    exit 2
+  fi
+fi
+
+exec "$@"
+EOF
+
+RUN chmod +x /usr/local/bin/fix-java-entrypoint
+
+RUN java -version && mvn -version && gradle --version && codeql --version
+
+ENTRYPOINT ["/usr/local/bin/fix-java-entrypoint"]

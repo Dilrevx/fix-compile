@@ -3,6 +3,7 @@
 import shlex
 import subprocess
 import sys
+import threading
 from pathlib import Path
 from typing import Optional
 
@@ -39,7 +40,11 @@ class Executor:
         self.verbose = verbose
 
     def execute(
-        self, cmd: list[str], cwd: Optional[str] = None, stream: bool = True
+        self,
+        cmd: list[str],
+        cwd: Optional[str] = None,
+        stream: bool = True,
+        log_dir: Optional[Path] = None,
     ) -> CommandResult:
         """
         Execute a shell command and capture output.
@@ -59,7 +64,12 @@ class Executor:
 
         try:
             if stream:
-                # Stream mode: show output in real-time, capture stderr
+                # Stream mode: read stdout and stderr concurrently via threads
+                # so neither pipe blocks, and optionally tee both to files in
+                # real-time (log_dir is written line-by-line, not just at end).
+                if log_dir:
+                    log_dir.mkdir(parents=True, exist_ok=True)
+
                 process = subprocess.Popen(
                     cmd,
                     stdout=subprocess.PIPE,
@@ -70,25 +80,52 @@ class Executor:
                     universal_newlines=True,
                 )
 
-                stdout_lines = []
-                stderr_lines = []
+                stdout_lines: list[str] = []
+                stderr_lines: list[str] = []
 
-                # Read stdout and stderr
-                while True:
-                    stdout_line = process.stdout.readline()
-                    if stdout_line:
-                        stdout_lines.append(stdout_line)
-                        ui.info(stdout_line.rstrip())
-                        sys.stdout.flush()
+                def _drain(
+                    pipe,
+                    lines: list[str],
+                    log_path: Optional[Path],
+                ) -> None:
+                    # Use append mode so a concurrent or repeated invocation
+                    # on the same log_dir does not truncate an in-progress file.
+                    fh = (
+                        open(log_path, "a", encoding="utf-8", buffering=1)
+                        if log_path
+                        else None
+                    )
+                    try:
+                        for line in pipe:
+                            lines.append(line)
+                            if fh:
+                                fh.write(line)
+                            ui.info(line.rstrip())
+                            sys.stdout.flush()
+                    finally:
+                        if fh:
+                            fh.close()
 
-                    # Check if process is done
-                    if process.poll() is not None:
-                        break
-
-                # Capture remaining stderr
-                stderr_output = process.stderr.read()
-                if stderr_output:
-                    stderr_lines.append(stderr_output)
+                t_out = threading.Thread(
+                    target=_drain,
+                    args=(
+                        process.stdout,
+                        stdout_lines,
+                        log_dir / "stdout.txt" if log_dir else None,
+                    ),
+                )
+                t_err = threading.Thread(
+                    target=_drain,
+                    args=(
+                        process.stderr,
+                        stderr_lines,
+                        log_dir / "stderr.txt" if log_dir else None,
+                    ),
+                )
+                t_out.start()
+                t_err.start()
+                t_out.join()
+                t_err.join()
 
                 exit_code = process.wait()
                 stdout = "".join(stdout_lines)

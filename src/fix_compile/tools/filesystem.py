@@ -99,3 +99,79 @@ def get_file_info(file_path: str, cwd: str = ".") -> dict:
             info["lines"] = None
 
     return info
+
+
+def write_file_content(file_path: str, content: str, cwd: str = ".") -> dict:
+    """Write content to a file in the specified working directory.
+
+    Args:
+        file_path: Path to the file (relative to cwd)
+        content: Content to write
+        cwd: Current working directory
+
+    Returns:
+        Dictionary with write result (success, path, error)
+    """
+    try:
+        full_path = Path(cwd) / file_path
+        full_path.parent.mkdir(parents=True, exist_ok=True)
+        full_path.write_text(content, encoding="utf-8")
+        return {"success": True, "path": file_path}
+    except Exception as e:
+        return {"success": False, "path": file_path, "error": str(e)}
+
+
+def backup_file(file_path: str, cwd: str = ".", suffix: str = ".bak") -> dict:
+    """Create a backup of a file with the given suffix.
+
+    Args:
+        file_path: Path to the file (relative to cwd)
+        cwd: Current working directory
+        suffix: Backup suffix (default: .bak)
+
+    Returns:
+        Dictionary with backup result (success, path, backup_path, error)
+    """
+    try:
+        full_path = Path(cwd) / file_path
+        if not full_path.exists() or not full_path.is_file():
+            return {
+                "success": False,
+                "path": file_path,
+                "error": "File does not exist or is not a file",
+            }
+
+        backup_path = Path(f"{full_path}{suffix}")
+        backup_path.write_text(full_path.read_text(encoding="utf-8"), encoding="utf-8")
+        return {
+            "success": True,
+            "path": file_path,
+            "backup_path": str(backup_path),
+        }
+    except Exception as e:
+        return {"success": False, "path": file_path, "error": str(e)}
+
+
+def list_directory(path: str = ".", cwd: str = ".") -> dict:
+    """List entries in a directory.
+
+    Args:
+        path: Directory path (relative to cwd)
+        cwd: Current working directory
+
+    Returns:
+        Dictionary with directory listing or error
+    """
+    try:
+        full_path = Path(cwd) / path
+        if not full_path.exists() or not full_path.is_dir():
+            return {
+                "success": False,
+                "path": path,
+                "error": "Directory does not exist",
+            }
+
+        entries = sorted([p.name for p in full_path.iterdir()])
+        return {"success": True, "path": path, "entries": entries}
+    except Exception as e:
+        return {"success": False, "path": path, "error": str(e)}

@@ -58,6 +58,34 @@ For DOCKER fixes:
     "changes_summary": "Brief summary of Dockerfile changes"
 }"""
 
+    PREFLIGHT_SYSTEM_PROMPT = """You are an expert Docker build compliance assistant.
+
+Your task is to review the provided Dockerfile and related files (including files copied by COPY/ADD)
+and make minimal changes so that all content fully complies with the USER CUSTOM REQUIREMENTS.
+
+Rules:
+1. Only modify files that are required to satisfy the custom requirements.
+2. Keep changes minimal and safe.
+3. Use paths relative to the build context root.
+4. If no changes are required, return an empty changes list.
+
+You MUST respond with valid JSON matching this exact schema:
+
+{
+    "reason": "Explanation of why these changes are needed (or why none are needed)",
+    "changes": [
+        {
+            "path": "Path to file (relative to build context, e.g., 'Dockerfile' or 'conf/settings.xml')",
+            "new_content": "Complete new content of the file",
+            "explanation": "Why this change is needed"
+        }
+    ],
+    "confidence": 0.85,
+    "changes_summary": "Brief summary of changes made"
+}
+
+Return only JSON, no extra text."""
+
     @staticmethod
     def build_system_prompt(custom_prompt: Optional[str] = None) -> str:
         """
@@ -93,6 +121,33 @@ For DOCKER fixes:
         return "\n".join(prompt_parts)
 
     @staticmethod
+    def build_preflight_system_prompt(custom_prompt: Optional[str] = None) -> str:
+        """
+        Build preflight system prompt for custom prompt compliance.
+
+        Args:
+            custom_prompt: User custom prompt to enforce
+
+        Returns:
+            Complete preflight system prompt string
+        """
+        prompt_parts = [PromptBuilder.PREFLIGHT_SYSTEM_PROMPT]
+
+        if custom_prompt and custom_prompt.strip():
+            prompt_parts.extend(
+                [
+                    "",
+                    "=== USER CUSTOM REQUIREMENTS ===",
+                    "The following requirements MUST be enforced:",
+                    custom_prompt.strip(),
+                    "",
+                    "IMPORTANT: All proposed changes MUST comply with the above requirements.",
+                ]
+            )
+
+        return "\n".join(prompt_parts)
+
+    @staticmethod
     def get_example_custom_prompts() -> dict[str, str]:
         """
         Get example custom prompts for reference.
@@ -101,11 +156,15 @@ For DOCKER fixes:
             Dictionary of example names to custom prompt strings
         """
         return {
-            "proxy": """All network operations must use HTTP/HTTPS proxy at 172.17.0.1:7890.
-For Dockerfile:
-- Set environment variables: ENV HTTP_PROXY=http://172.17.0.1:7890 HTTPS_PROXY=http://172.17.0.1:7890
-- Apply proxy to all RUN commands that download packages (apt-get, pip, npm, etc.)
-- Ensure proxy is used for wget, curl, git clone, and similar commands""",
+            "proxy": """All network operations inside Docker must use HTTP/HTTPS proxy at 127.0.0.1:7890.
+(Docker containers run with --network=host so the host loopback address 127.0.0.1 is directly reachable.)
+
+For Dockerfile / shell tools (wget, curl, git, apt):
+- Set ENV HTTP_PROXY=http://127.0.0.1:7890 HTTPS_PROXY=http://127.0.0.1:7890 NO_PROXY=localhost,127.0.0.1,::1
+- Write /etc/profile.d/proxy.sh exporting the same vars for login shells
+
+Note: Maven (<proxies> in settings.xml) and Gradle (systemProp.* in gradle.properties)
+are configured automatically by the build system — do NOT duplicate them in this prompt.""",
             "china_mirror": """Use China mirror sources for package installations:
 - For apt: Use Tsinghua/Aliyun mirrors
 - For pip: Use https://pypi.tuna.tsinghua.edu.cn/simple

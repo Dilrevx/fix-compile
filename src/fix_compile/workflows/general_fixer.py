@@ -13,7 +13,7 @@ from fix_compile.tools import execute_command
 from fix_compile.utils import ui
 from fix_compile.utils.prompt_builder import PromptBuilder
 
-from ..schema import FixSuggestion, FixType, GeneralAnalysisContext
+from ..schema import FixSuggestion, FixType, GeneralAnalysisContext, PreflightSuggestion
 
 # ============================================================================
 # GeneralFixer Class
@@ -138,6 +138,76 @@ class GeneralFixer:
             ui.error(f"Analysis failed: {e}")
             raise
 
+    def preflight_custom_prompt(
+        self,
+        dockerfile_path: str,
+        dockerfile_content: str,
+        build_context: str,
+        related_files: dict[str, str],
+    ) -> PreflightSuggestion:
+        """
+        Generate preflight changes to comply with custom prompt.
+
+        Args:
+            dockerfile_path: Path to Dockerfile (relative to build context)
+            dockerfile_content: Dockerfile content
+            build_context: Build context path
+            related_files: Mapping of related file path to file content
+
+        Returns:
+            PreflightSuggestion with proposed changes
+        """
+        system_prompt = PromptBuilder.build_preflight_system_prompt(self.custom_prompt)
+        user_prompt = self._build_preflight_user_prompt(
+            dockerfile_path=dockerfile_path,
+            dockerfile_content=dockerfile_content,
+            build_context=build_context,
+            related_files=related_files,
+        )
+
+        try:
+            messages = [
+                SystemMessage(content=system_prompt),
+                HumanMessage(content=user_prompt),
+            ]
+
+            response = self.client.invoke(
+                messages,
+                temperature=0.2,
+                max_tokens=self.config.MAX_TOKENS,
+            )
+
+            content = response.content
+            if not content:
+                ui.warning("LLM returned empty preflight response")
+                return PreflightSuggestion(
+                    reason="LLM returned empty response",
+                    changes=[],
+                    confidence=0.0,
+                    changes_summary="No changes generated",
+                )
+
+            preflight_dict = json.loads(content)
+            suggestion = PreflightSuggestion(**preflight_dict)
+
+            ui.success(
+                f"Preflight analysis complete (confidence: {suggestion.confidence:.0%})"
+            )
+            ui.debug(f"Preflight reason: {suggestion.reason}")
+            ui.debug(f"Preflight changes: {len(suggestion.changes)}")
+
+            return suggestion
+
+        except ValidationError as e:
+            ui.error(f"LLM preflight response validation failed: {e}")
+            raise
+        except json.JSONDecodeError as e:
+            ui.error(f"Failed to parse LLM preflight JSON response: {e}")
+            raise
+        except Exception as e:
+            ui.error(f"Preflight analysis failed: {e}")
+            raise
+
     def _build_user_prompt(self, context: GeneralAnalysisContext) -> str:
         """Build the user prompt from context with file system information."""
         prompt_parts = [
@@ -182,6 +252,52 @@ class GeneralFixer:
                 "",
                 "Please analyze this error and provide a fix as JSON.",
                 "Include the appropriate fix_type (command, file, or docker) based on the error.",
+            ]
+        )
+
+        return "\n".join(prompt_parts)
+
+    def _build_preflight_user_prompt(
+        self,
+        dockerfile_path: str,
+        dockerfile_content: str,
+        build_context: str,
+        related_files: dict[str, str],
+    ) -> str:
+        """Build user prompt for preflight custom prompt compliance."""
+        prompt_parts = [
+            "=== PREFLIGHT CONTEXT ===",
+            f"Build Context: {build_context}",
+            f"Dockerfile Path: {dockerfile_path}",
+            "",
+            "=== DOCKERFILE ===",
+            dockerfile_content,
+        ]
+
+        if related_files:
+            prompt_parts.append("")
+            prompt_parts.append("=== RELATED FILES (COPY/ADD SOURCES) ===")
+            for path, content in related_files.items():
+                prompt_parts.extend(
+                    [
+                        "",
+                        f"--- File: {path} ---",
+                        content,
+                    ]
+                )
+        else:
+            prompt_parts.extend(
+                [
+                    "",
+                    "=== RELATED FILES (COPY/ADD SOURCES) ===",
+                    "(No related files were provided)",
+                ]
+            )
+
+        prompt_parts.extend(
+            [
+                "",
+                "Please return JSON only following the required schema.",
             ]
         )
 

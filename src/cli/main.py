@@ -11,6 +11,7 @@ from cli.commands import config_app, docker_app
 from fix_compile.config import config_service
 from fix_compile.constants import PROJECT_NAME
 from fix_compile.executor import ExecutionError, Executor
+from fix_compile.schema import JavaFixConfig
 from fix_compile.utils.io import cmd2hash, save_exec_output
 from fix_compile.utils.ui import (
     console,
@@ -21,6 +22,7 @@ from fix_compile.utils.ui import (
     warning,
 )
 from fix_compile.workflows.general_fixer import GeneralFixer
+from fix_compile.workflows.java_fixer import JavaCompileAgent
 
 app = typer.Typer(
     name=PROJECT_NAME,
@@ -214,6 +216,94 @@ def fix_command(
         raise typer.Exit(1)
     except ExecutionError as e:
         error(f"Command execution failed: {e}")
+        raise typer.Exit(1)
+
+
+@app.command(
+    name="java",
+    no_args_is_help=True,
+    context_settings={"allow_extra_args": True, "ignore_unknown_options": True},
+    help="Compile Java project in isolated docker environment with optional LLM auto-fix and CodeQL.",
+)
+def java_command(
+    ctx: typer.Context,
+    dir: Path = typer.Option(..., "--dir", help="Java project directory"),
+    docker: bool = typer.Option(
+        False,
+        "--docker",
+        help="Run compile in isolated docker environment",
+    ),
+    with_codeql: bool = typer.Option(
+        False,
+        "--with-codeql",
+        help="Run CodeQL analysis after successful compile",
+    ),
+    compile_cmd: Optional[str] = typer.Option(
+        None,
+        "--compile-cmd",
+        help="Override compile command, e.g. './mvnw -B -DskipTests compile'",
+    ),
+    m2_settings: Optional[Path] = typer.Option(
+        None,
+        "--m2-settings",
+        help="Path to Maven settings.xml (mounted to container)",
+    ),
+    docker_arg: Optional[List[str]] = typer.Option(
+        None,
+        "--docker-arg",
+        help="Extra docker run arg, repeatable",
+    ),
+    max_attempts: Optional[int] = typer.Option(
+        None,
+        "--max-attempts",
+        min=1,
+        help="Override max LLM auto-fix attempts",
+    ),
+    no_fix: bool = typer.Option(False, "--no-fix", help="Disable LLM auto-fix"),
+    force: bool = typer.Option(
+        False,
+        "--force",
+        help="Force rebuild runtime image and rerun",
+    ),
+    dev: bool = typer.Option(False, "--dev", help="Enable dev mode (.env)"),
+):
+    """Run Java compile fix workflow in isolated docker."""
+    config_service.load_config(dev_mode=dev)
+    config = config_service.config
+
+    java_config = JavaFixConfig(
+        project_dir=dir.resolve().as_posix(),
+        use_docker=docker,
+        with_codeql=with_codeql,
+        no_fix=no_fix,
+        force_rebuild=force,
+        max_attempts=max_attempts or config.JAVA_MAX_FIX_ATTEMPTS,
+        compile_command=compile_cmd,
+        passthrough_args=list(ctx.args),
+        docker_run_args=docker_arg or [],
+        m2_settings_file=m2_settings.resolve().as_posix() if m2_settings else None,
+    )
+
+    try:
+        agent = JavaCompileAgent(config)
+        result = agent.run_pipeline(java_config)
+
+        if result.success:
+            success("Java workflow succeeded")
+            info(f"Build tool: {result.build_tool.value}")
+            info(f"Build command: {result.build_command}")
+            if result.codeql_command:
+                info("CodeQL: completed")
+            info(f"Logs: {result.logs_dir}")
+            return
+
+        error("Java workflow failed")
+        info(f"Build tool: {result.build_tool.value}")
+        info(f"Last build command: {result.build_command}")
+        info(f"Logs: {result.logs_dir}")
+        raise typer.Exit(1)
+    except Exception as e:
+        error(f"Java workflow error: {e}")
         raise typer.Exit(1)
 
 

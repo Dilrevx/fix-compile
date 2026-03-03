@@ -7,6 +7,7 @@ import logging
 
 from rich.console import Console
 from rich.panel import Panel
+from rich.prompt import Confirm
 from rich.syntax import Syntax
 
 from fix_compile.constants import PROJECT_NAME
@@ -56,6 +57,11 @@ def step(message: str) -> None:
     logger.info(f"Step: {message}")
 
 
+def confirm(message: str, default: bool = False) -> bool:
+    """Prompt user for confirmation in the console."""
+    return Confirm.ask(message, default=default)
+
+
 # ---------------------------------------------------------
 # 2. Rich Visualization Components
 # ---------------------------------------------------------
@@ -89,3 +95,11 @@ def print_comparison(original: str, fixed: str) -> None:
             expand=False,
         )
     )
+
+
+def print_file_content(content: str, title: str = "File Content") -> None:
+    """Print generic file content with syntax highlighting."""
+    logger.debug(f"Displaying file content ({title})")
+
+    syntax = Syntax(content, "text", theme="monokai", line_numbers=True)
+    console.print(Panel(syntax, title=title, expand=False, border_style="blue"))
