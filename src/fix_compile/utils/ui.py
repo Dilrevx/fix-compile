@@ -6,6 +6,7 @@ Handles console output (via Rich) and logging integration.
 import logging
 
 from rich.console import Console
+from rich.markup import escape
 from rich.panel import Panel
 from rich.prompt import Confirm
 from rich.syntax import Syntax
@@ -29,31 +30,31 @@ def debug(message: str) -> None:
 
 def success(message: str) -> None:
     """Print success message to console and log as INFO."""
-    console.print(f"[green]✓[/green] {message}")
+    console.print(f"[green]✓[/green] {escape(message)}")
     logger.info(message)
 
 
 def error(message: str) -> None:
     """Print error message to console and log as ERROR."""
-    console.print(f"[red]✗[/red] {message}")
+    console.print(f"[red]✗[/red] {escape(message)}")
     logger.error(message)
 
 
 def warning(message: str) -> None:
     """Print warning message to console and log as WARNING."""
-    console.print(f"[yellow]⚠[/yellow] {message}")
+    console.print(f"[yellow]⚠[/yellow] {escape(message)}")
     logger.warning(message)
 
 
 def info(message: str) -> None:
     """Print info message to console and log as INFO."""
-    console.print(f"[blue]ℹ[/blue] {message}")
+    console.print(f"[blue]ℹ[/blue] {escape(message)}")
     logger.info(message)
 
 
 def step(message: str) -> None:
     """Print a step execution message."""
-    console.print(f"[bold blue]➤[/bold blue] {message}")
+    console.print(f"[bold blue]➤[/bold blue] {escape(message)}")
     logger.info(f"Step: {message}")
 
 

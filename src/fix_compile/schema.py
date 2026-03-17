@@ -278,29 +278,40 @@ class JavaFixConfig(BaseModel):
     """Configuration for Java isolated docker auto-fix workflow."""
 
     project_dir: str = Field(description="Absolute path of Java project directory")
-    use_docker: bool = Field(default=True, description="Run workflow in docker")
-    with_codeql: bool = Field(default=False, description="Run CodeQL after compile")
-    no_fix: bool = Field(default=False, description="Disable LLM auto fix")
-    force_rebuild: bool = Field(
-        default=False, description="Force rebuild docker image and rerun"
-    )
-    max_attempts: int = Field(default=3, gt=0, description="Max auto fix attempts")
-    compile_command: Optional[str] = Field(
-        default=None,
-        description="Optional compile command override (shell string)",
-    )
-    passthrough_args: list[str] = Field(
-        default_factory=list,
-        description="Extra args appended to compile command",
-    )
-    docker_run_args: list[str] = Field(
-        default_factory=list,
-        description="Extra args passed through to docker run",
-    )
-    m2_settings_file: Optional[str] = Field(
-        default=None,
-        description="Optional absolute path to Maven settings.xml to mount",
-    )
+
+    class DockerEnvConfig(BaseModel):
+        """Docker runtime environment configuration for Java workflow."""
+
+        use_docker: bool = Field(default=True, description="Run workflow in docker")
+        force_rebuild: bool = Field(
+            default=False, description="Force rebuild docker image and rerun"
+        )
+        docker_run_args: list[str] = Field(
+            default_factory=list,
+            description="Extra args passed through to docker run",
+        )
+        m2_settings_file: Optional[str] = Field(
+            default=None,
+            description="Optional absolute path to Maven settings.xml to mount",
+        )
+
+    class ProjectBuildConfig(BaseModel):
+        """Java project build behavior configuration."""
+
+        with_codeql: bool = Field(default=False, description="Run CodeQL after compile")
+        no_fix: bool = Field(default=False, description="Disable LLM auto fix")
+        max_attempts: int = Field(default=3, gt=0, description="Max auto fix attempts")
+        compile_command: Optional[str] = Field(
+            default=None,
+            description="Optional compile command override (shell string)",
+        )
+        passthrough_args: list[str] = Field(
+            default_factory=list,
+            description="Extra args appended to compile command",
+        )
+
+    docker_env: DockerEnvConfig = Field(default_factory=DockerEnvConfig)
+    project_build: ProjectBuildConfig = Field(default_factory=ProjectBuildConfig)
 
 
 class JavaFixResult(BaseModel):

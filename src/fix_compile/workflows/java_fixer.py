@@ -24,10 +24,13 @@ class JavaCompileAgent:
     def run_pipeline(self, java_config: JavaFixConfig) -> JavaFixResult:
         """Run the Java compile pipeline in docker with optional CodeQL scan."""
         project_dir = Path(java_config.project_dir).resolve()
+        docker_env = java_config.docker_env
+        project_build = java_config.project_build
+
         if not project_dir.exists() or not project_dir.is_dir():
             raise FileNotFoundError(f"Java project dir not found: {project_dir}")
 
-        if not java_config.use_docker:
+        if not docker_env.use_docker:
             raise ValueError("Current java workflow only supports --docker mode")
 
         self._ensure_docker_available()
@@ -35,8 +38,8 @@ class JavaCompileAgent:
         run_hash = cmd2hash(
             [
                 project_dir.as_posix(),
-                str(java_config.with_codeql),
-                *java_config.passthrough_args,
+                str(project_build.with_codeql),
+                *project_build.passthrough_args,
             ],
             project_dir,
         )
@@ -50,9 +53,9 @@ class JavaCompileAgent:
 
         build_tool = self._detect_build_tool(project_dir)
         compile_cmd = self._default_compile_command(build_tool, project_dir)
-        if java_config.compile_command:
-            compile_cmd = shlex.split(java_config.compile_command)
-        m2_settings = self._resolve_m2_settings(java_config.m2_settings_file)
+        if project_build.compile_command:
+            compile_cmd = shlex.split(project_build.compile_command)
+        m2_settings = self._resolve_m2_settings(docker_env.m2_settings_file)
 
         image_tag = f"{self.config.JAVA_DOCKER_IMAGE_PREFIX}:{run_hash}"
         need_rebuild_image = True
@@ -61,13 +64,13 @@ class JavaCompileAgent:
         success = False
         attempt_used = 0
 
-        for attempt in range(1, java_config.max_attempts + 1):
+        for attempt in range(1, project_build.max_attempts + 1):
             attempt_used = attempt
-            ui.step(f"Java compile attempt {attempt}/{java_config.max_attempts}")
+            ui.step(f"Java compile attempt {attempt}/{project_build.max_attempts}")
 
             attempt_dir = run_dir / f"attempt-{attempt}"
 
-            if need_rebuild_image or java_config.force_rebuild:
+            if need_rebuild_image or docker_env.force_rebuild:
                 image_result = self._build_java_image(
                     dockerfile_path=dockerfile_path,
                     run_dir=run_dir,
@@ -84,9 +87,9 @@ class JavaCompileAgent:
                 project_dir=project_dir,
                 run_dir=run_dir,
                 compile_cmd=compile_cmd,
-                passthrough_args=java_config.passthrough_args,
+                passthrough_args=project_build.passthrough_args,
                 m2_settings=m2_settings,
-                docker_run_args=java_config.docker_run_args,
+                docker_run_args=docker_env.docker_run_args,
                 log_dir=attempt_dir / "compile",
             )
             save_exec_output(compile_result, attempt_dir / "compile")
@@ -99,7 +102,7 @@ class JavaCompileAgent:
                 break
 
             ui.warning("Compile failed in docker container")
-            if java_config.no_fix:
+            if project_build.no_fix:
                 break
 
             suggestion = self._get_fixer().quick_analyze(
@@ -125,7 +128,7 @@ class JavaCompileAgent:
                 logs_dir=run_dir.as_posix(),
             )
 
-        if java_config.with_codeql:
+        if project_build.with_codeql:
             codeql_command = self._build_codeql_command(compile_cmd)
             codeql_log_dir = run_dir / f"attempt-{attempt_used}" / "codeql"
             codeql_result = self._run_shell_in_container(
@@ -134,7 +137,7 @@ class JavaCompileAgent:
                 run_dir=run_dir,
                 shell_cmd=codeql_command,
                 m2_settings=m2_settings,
-                docker_run_args=java_config.docker_run_args,
+                docker_run_args=docker_env.docker_run_args,
                 log_dir=codeql_log_dir,
             )
             save_exec_output(codeql_result, codeql_log_dir)
@@ -409,10 +412,33 @@ class JavaCompileAgent:
         cmd.extend(["bash", "-lc", shell_cmd])
         return self.executor.execute(cmd, stream=True, log_dir=log_dir)
 
+    def _build_docker_env_hint(self) -> str:
+        """Build concise docker environment hints for LLM troubleshooting."""
+        proxy_vals = {
+            key: self._safe_env(key)
+            for key in ("HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY")
+        }
+        proxy_enabled = any(proxy_vals.values())
+        m2_mirror = self.config.JAVA_M2_MIRROR_URL.strip() or "(not set)"
+
+        hint_lines = [
+            "=== DOCKER ENV HINT ===",
+            "Compilation runs inside Docker containers with --network=host.",
+            f"Proxy env enabled: {'yes' if proxy_enabled else 'no'}",
+            f"HTTP_PROXY: {proxy_vals['HTTP_PROXY'] or '(empty)'}",
+            f"HTTPS_PROXY: {proxy_vals['HTTPS_PROXY'] or '(empty)'}",
+            f"NO_PROXY: {proxy_vals['NO_PROXY'] or '(empty)'}",
+            f"Maven mirror URL: {m2_mirror}",
+            "Maven proxy is configured via settings.xml <proxies> when proxy env exists.",
+            "If network download stalls/hangs, check proxy reachability inside container first.",
+        ]
+        return "\n".join(hint_lines)
+
     def _build_error_log(self, result, compile_cmd: list[str]) -> str:
         return (
             f"compile command: {shlex.join(compile_cmd)}\n"
             f"cwd: {result.cwd}\n\n"
+            f"{self._build_docker_env_hint()}\n\n"
             f"STDOUT:\n{result.stdout}\n\nSTDERR:\n{result.stderr}"
         )
 
@@ -472,11 +498,13 @@ class JavaCompileAgent:
 
         return (
             f"codeql database create {codeql_db} "
+            "--overwrite "
             f"--language={self.config.JAVA_CODEQL_LANGUAGE} "
             f"--source-root={self.config.JAVA_DOCKER_WORKDIR} "
             f"--command {compile_part} "
             "&& "
             f"codeql database analyze {codeql_db} "
+            "--download "
             f"{self.config.JAVA_CODEQL_QUERY_SUITE} "
             f"--format=sarif-latest --output={codeql_out}"
         )

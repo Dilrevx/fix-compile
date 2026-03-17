@@ -273,15 +273,19 @@ def java_command(
 
     java_config = JavaFixConfig(
         project_dir=dir.resolve().as_posix(),
-        use_docker=docker,
-        with_codeql=with_codeql,
-        no_fix=no_fix,
-        force_rebuild=force,
-        max_attempts=max_attempts or config.JAVA_MAX_FIX_ATTEMPTS,
-        compile_command=compile_cmd,
-        passthrough_args=list(ctx.args),
-        docker_run_args=docker_arg or [],
-        m2_settings_file=m2_settings.resolve().as_posix() if m2_settings else None,
+        docker_env=JavaFixConfig.DockerEnvConfig(
+            use_docker=docker,
+            force_rebuild=force,
+            docker_run_args=docker_arg or [],
+            m2_settings_file=m2_settings.resolve().as_posix() if m2_settings else None,
+        ),
+        project_build=JavaFixConfig.ProjectBuildConfig(
+            with_codeql=with_codeql,
+            no_fix=no_fix,
+            max_attempts=max_attempts or config.JAVA_MAX_FIX_ATTEMPTS,
+            compile_command=compile_cmd,
+            passthrough_args=list(ctx.args),
+        ),
     )
 
     try:
